@@ -40,6 +40,8 @@ module top_earlgrey_bergen #(
   output              IO_UPHY_OE_N,
   input               IO_UPHY_SENSE,
   output              IO_UPHY_DPPULLUP,
+  output              IO_UPHY_SPD, //Set to '1'
+  output              IO_UPHY_SUS, //Set to '0'
   // GPIO x 16 interface
   inout               IO_GP0,
   inout               IO_GP1,
@@ -307,16 +309,28 @@ module top_earlgrey_bergen #(
     .I (IO_UPHY_SENSE),
     .O (uphy_sense)
   );
+  
+  // Force phy online
+  OBUF o_uphy_sus (
+    .O (IO_UPHY_SUS),
+    .I (1'b0)
+  );
+  
+  // Force full-speed
+  OBUF o_uphy_spd (
+    .O (IO_UPHY_SPD),
+    .I (1'b1)
+  );
 
 
   // The output enable for IO_USB_DNPULLUP0 is used to decide whether we need to undo the swapping.
   logic undo_swap;
   assign undo_swap = dio_oe_core[DioIdxUsbDnPullup0];
 
-  // GPIO[2] = Switch 2 on board is used to select using the UPHY
+  // Bergen board uses uphy by default
   // Keep GPIO[1] for selecting differential in sw
   logic use_uphy;
-  assign use_uphy = mio_in_core[2];
+  assign use_uphy = 1'b1; //mio_in_core[2];
 
   for (genvar i = 0; i < pinmux_reg_pkg::NDioPads; i++) begin : gen_dio
     if (i == DioIdxUsbDn0) begin
