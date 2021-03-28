@@ -21,13 +21,13 @@ create_clock -add -name sys_clk_pin -period 10.00 -waveform {0 5} [get_ports IO_
 ## LEDs
 set_property -dict { PACKAGE_PIN R16  DRIVE 8 IOSTANDARD LVCMOS33 } [get_ports { IO_GP8 }];  #PMOD2-1
 set_property -dict { PACKAGE_PIN R17  DRIVE 8 IOSTANDARD LVCMOS33 } [get_ports { IO_GP9 }];  #PMOD2-2
-set_property -dict { PACKAGE_PIN N18  DRIVE 8 IOSTANDARD LVCMOS33 } [get_ports { IO_GP10}]; #PMOD2-3
+set_property -dict { PACKAGE_PIN N18  DRIVE 8 IOSTANDARD LVCMOS33 } [get_ports { IO_GP10}];  #PMOD2-3
 
 ## Buttons
 set_property -dict { PACKAGE_PIN AB10 IOSTANDARD LVCMOS18 } [get_ports { IO_RST_N }]; #pushbutton
 
 ## Switches
-set_property -dict { PACKAGE_PIN N18 IOSTANDARD LVCMOS33 } [get_ports { IO_GP0 }]; #PMOD2-4
+set_property -dict { PACKAGE_PIN N19 IOSTANDARD LVCMOS33 } [get_ports { IO_GP0 }]; #PMOD2-4
 set_property -dict { PACKAGE_PIN N16 IOSTANDARD LVCMOS33 } [get_ports { IO_GP1 }]; #PMOD2-5
 set_property -dict { PACKAGE_PIN T19 IOSTANDARD LVCMOS33 } [get_ports { IO_GP2 }]; #PMOD2-6
 set_property -dict { PACKAGE_PIN P18 IOSTANDARD LVCMOS33 } [get_ports { IO_GP3 }]; #PMOD2-7
@@ -73,9 +73,8 @@ set_property -dict { PACKAGE_PIN T17   IOSTANDARD LVCMOS33 } [get_ports { IO_UPH
 set_property -dict { PACKAGE_PIN U16   IOSTANDARD LVCMOS33 } [get_ports { IO_UPHY_SENSE }]; #USRUSB_VBUS_DETECT
 set_property -dict { PACKAGE_PIN U17   IOSTANDARD LVCMOS33 } [get_ports { IO_UPHY_OE_N }]; #USRUSB_OE
 set_property -dict { PACKAGE_PIN T18   IOSTANDARD LVCMOS33 } [get_ports { IO_UPHY_D_RX }]; #USRUSB_RCV
-set property -dict { PACKAGE_PIN M19   IOSTANDARD LVCMOS33 } [get_ports { IO_UPHY_SPD  }]; #USRUSB_SPD
-set property -dict { PACKAGE_PIN R18   IOSTANDARD LVCMOS33 } [get_ports { IO_UPHY_SUS  }]; #USRUSB_SUS
-
+set_property -dict { PACKAGE_PIN M19   IOSTANDARD LVCMOS33 } [get_ports { IO_UPHY_SPD  }]; #USRUSB_SPD
+set_property -dict { PACKAGE_PIN R18   IOSTANDARD LVCMOS33 } [get_ports { IO_UPHY_SUS  }]; #USRUSB_SUS
 
 set_property -dict { PACKAGE_PIN A10   IOSTANDARD LVCMOS33 } [get_ports { IO_USB_DP0 }]; #USERIOB-19
 set_property -dict { PACKAGE_PIN B11   IOSTANDARD LVCMOS33 } [get_ports { IO_USB_DN0 }]; #USERIOB-21
