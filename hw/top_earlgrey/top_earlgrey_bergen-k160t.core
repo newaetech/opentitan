@@ -2,14 +2,14 @@ CAPI=2:
 # Copyright lowRISC contributors.
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
-name: "lowrisc:systems:top_earlgrey_bergen-k410t:0.1"
+name: "lowrisc:systems:top_earlgrey_bergen-k160t:0.1"
 description: "Earl Grey toplevel for the CW310 Bergen board"
 filesets:
   files_rtl_bergen:
     depend:
       - lowrisc:systems:top_earlgrey:0.1
       - lowrisc:systems:top_earlgrey_pkg
-#      - lowrisc:tool:top_earlgrey_nexysvideo_size_check #Is this needed?
+      - lowrisc:tool:top_earlgrey_nexysvideo_size_check
     files:
       - rtl/clkgen_xil7series.sv
       - rtl/top_earlgrey_bergen.sv
@@ -68,4 +68,4 @@ targets:
       - PRIM_DEFAULT_IMPL=prim_pkg::ImplXilinx
     tools:
       vivado:
-        part: "xc7k410tfbg676-2" # CW310 Board (Bergen Board) with K410T
+        part: "xc7k160tfbg676-2" # CW310 Board (Bergen Board) with K160T
