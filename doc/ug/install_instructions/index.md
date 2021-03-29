@@ -393,6 +393,9 @@ ACTION=="add|change", SUBSYSTEM=="usb|tty", ATTRS{idVendor}=="0403", ATTRS{idPro
 
 # Future Technology Devices International, Ltd FT232 Serial (UART) IC
 ACTION=="add|change", SUBSYSTEM=="usb|tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", MODE="0666"
+
+# CW310 aka Bergen Board (FPGA Target) USB
+ACTION=="add|change", SUBSYSTEM=="usb|tty", ATTRS{idVendor}=="2b3e", ATTRS{idProduct}=="c310", MODE="0666"
 ```
 
 You then need to reload the udev rules:
