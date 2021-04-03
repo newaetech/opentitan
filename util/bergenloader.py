@@ -285,18 +285,15 @@ def main(argv):
     else:
         print("    No bitstream specified")
     target = cw.target(None, CW310, bsfile=args.bitstream, slurp=False)
-    
-    bsfilename = r"/home/colin/ot/opentitan/build/lowrisc_systems_top_englishbreakfast_bergen-k160t_0.1/synth-vivado/lowrisc_systems_top_englishbreakfast_bergen-k160t_0.1.bit"
-    binfilename = r'/home/colin/ot/opentitan/build-bin/sw/device/sca/aes_serial_fpga_nexysvideo.bin'
 
     print("Board found, setting PLL2 to 100 MHz")
     
     target.pll.pll_enable_set(True)
     target.pll.pll_outenable_set(False, 0)
-    target.pll.pll_outenable_set(False, 1)
-    target.pll.pll_outenable_set(True, 2)
+    target.pll.pll_outenable_set(True, 1) #TODO - check CW310 module, 1/2 reversed
+    target.pll.pll_outenable_set(False, 2)
 
-    target.pll.pll_outfreq_set(100E6, 2)
+    target.pll.pll_outfreq_set(100E6, 2) #PLL needs both 1&2 set, even if only 1 enabled
     target.pll.pll_outfreq_set(100E6, 1)
 
     if args.firmware:
