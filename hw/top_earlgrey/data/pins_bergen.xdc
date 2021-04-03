@@ -1,6 +1,6 @@
 # ChipWhisperer CW310 "Bergen Board".
 #
-# WARNING WARNING WARNING - This XDC file is for "rev04" only. The pin mapping changes in the final (rev05 and later) release.
+# This pin mapping is for the REV06 (final) PCB (and later).
 #
 
 ## Clock Signal
