@@ -9,7 +9,6 @@ filesets:
     depend:
       - lowrisc:systems:top_earlgrey:0.1
       - lowrisc:systems:top_earlgrey_pkg
-#      - lowrisc:tool:top_earlgrey_nexysvideo_size_check #Is this needed?
     files:
       - rtl/clkgen_xil7series.sv
       - rtl/top_earlgrey_bergen.sv
