@@ -20,3 +20,9 @@ Most large electronics distributors like Farnell/element14, RS Components, Mouse
 ### Notes
 
 * The board ships with a US and European power plug. Users in other countries need to use or order an adapter, e.g. [this one from the Digilent store](https://store.digilentinc.com/european-uk-wall-plug-adapter/) (but any travel adapter works).
+
+## ChipWhisperer "Bergen Board" CW310
+
+The Bergen Board is officially the ChipWhisperer CW310 target, available with a Kintex K160T or Kintex K410T target.
+
+See [Bergen Board Quick-Start]({{< relref "getting_started_bergen.md" >}}) for setup of this board.
