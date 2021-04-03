@@ -47,7 +47,7 @@ If you are using a prebuilt bitstream, you will not need to setup Vivado (see se
 
 ### udev rule setup
 
-The Bergen Board uses a new USB device tyoe, so add the following to the `90-opentitan.rules` file in `/etc/udev/rules.d` which will also allow you access to other newae devices:
+The Bergen Board uses a new USB device type, so add the following to the `90-opentitan.rules` file in `/etc/udev/rules.d` which will also allow you access to other newae devices:
 
 ```
 # ChipWhisperer Bergen Board
@@ -172,13 +172,13 @@ git checkout hw_cw310
 pip3 install --user -r python-requirements.txt
 ```
 
-Note that auto detach has been disabled in user accounts with:
+Note that auto detach has been disabled in user accounts for screen with:
 
 ```
 echo autodetach off >> ~/.screenrc
 ```
 
-This is to avoid serial port conflicts when you disconnect (or time out) and left your screen session open.
+This is to avoid serial port conflicts when you disconnect (or time out) and your screen session stays alive but detached, preventing others from using the serial port.
 
 ### Hello World from OT Server
 
@@ -288,7 +288,7 @@ And set it to be executable:
 chmod a+x phywhisperer-toggle.py
 ```
 
-Next, load the `usbdev` image:
+Next, load the `hello_usbdev` image:
 ```
 cd $REPO_TOP
 ./util/bergenloader.py -fw temp_build_cache/hello_usbdev_fpga_nexysvideo.bin
@@ -327,9 +327,9 @@ Characters you type on this should appear on the serial port you started with `b
 
 #### Sniffing USB traffic with PhyWhisperer-USB
 
-The PhyWhisperer-USB also allows you to sniff some of the data. Note that PhyWhisperer-USB is designed as a triggering hardware and not as a sniffer, so this functionality is limited.
+The PhyWhisperer-USB also allows you to sniff some of the data. Note that PhyWhisperer-USB is designed as a triggering hardware and not as a sniffer, so sniffing functionality is limited to a small 8191 entry buffer (but enough for enumeration sniffing in this example).
 
-To test the sniffing, add the following code to a file:
+To test the sniffing, copy the following code to a file which you save as `phywhisperer-sniff-enum.py` & again make executable.
 
 ```python
 #!/usr/bin/env python3
@@ -354,9 +354,7 @@ for packet in packets:
     printPackets.handle_usb_packet(ts=packet['timestamp'], buf=bytearray(packet['contents']), flags=0)
 ```
 
-Save it as for example `phywhisperer-sniff-enum.py`
-
-Then run this command - this will disconnect & reconnect the device, while looking for some enumeration traffic. Note that the PhyWhisperer waits until it sees the USB sequence `0x2d`, `0x00` to start capturing, so no data is returned if the link doesn't come up at all.
+Then run this file - this will disconnect & reconnect the USB port, while also looking for some enumeration traffic. Note that the PhyWhisperer waits until it sees the USB sequence `0x2d`, `0x00` to start capturing, so no data is returned if the link doesn't come up at all.
 
 ```console
 ./phywhisperer-sniff-enum.py
@@ -425,6 +423,8 @@ WARNING:root:8191 entries captured.
 [      ]   0.107996 d=  0.000003 [ 77   +454.667] [ 11] DATA0: 80 06 00 01 00 00 12 00 e0 f4
 ...many more lines...
 ```
+
+This shows you sniffing the USB traffic & confirming the OT USB phy is working.
 
 ### Screen error 
 
