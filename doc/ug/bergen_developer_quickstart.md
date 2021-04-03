@@ -2,7 +2,7 @@
 title: "Bergen Board for OpenTitan Developers"
 ---
 
-![Bergen Board image](img/bergenk410t.jpeg)
+![Bergen Board image](../bergen_board/img/bergenk410t.jpeg)
 
 This guide is targeted at existing OpenTitan Developers who want to get up to speed with the Bergen Board.
 
