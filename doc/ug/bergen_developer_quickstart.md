@@ -6,6 +6,14 @@ title: "Bergen Board for OpenTitan Developers"
 
 This guide is targeted at existing OpenTitan Developers who want to get up to speed with the Bergen Board.
 
+{{< note title="CW310 Bergen Board Resources" >}}
+
+In addition to this guide, see resources for this board at:
+* [CW310 Bergen Board Documentation](https://rtfm.newae.com/Targets/CW310%20Bergen%20Board/)
+* [CW310 Bergen Board github](https://github.com/newaetech/cw310-bergen-board)
+
+{{< /note >}}
+
 ## Bergen Board Background
 
 Unlike standard dev-boards, Bergen includes a programmable microcontroller that communicates with the target FPGA. This microcontroller is responsible for tasks including:
@@ -42,7 +50,7 @@ The board also contains multiple features specific for power analysis & fault in
 
 **NB: You will need to get a Vivado 30-day trial license for the K410T device**. This must be done via the online Xilinx website (*not* via the license manager within Vivado). Using the online website will allow you to continue an evaluation by requesting a new evaluation license, as you may not be able to fully evaluate the power of Vivado within 30 days. The license manager within Vivado only allows a single license request.
 
-If you are using a prebuilt bitstream, you will not need to setup Vivado (see section [OpenTitan Bergen Board Examples](#OpenTitan Bergen Board Examples)).
+If you are using a prebuilt bitstream, you will not need to setup Vivado (see section [OpenTitan Bergen Board Examples](#opentitan-bergen-board-examples)).
 
 
 ### udev rule setup
