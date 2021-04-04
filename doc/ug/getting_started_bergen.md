@@ -75,19 +75,21 @@ You'll have to adjust some switches based on your power choices. You can choose 
 
 The first choice is the most convient, but requires you to plug the board into a USB-C host port or through a powered USB hub. In addition some designs will take more power than is available from your USB computer port. If this happens you'll get "USB surge" error messages and could even damage your host computer.
 
-The easiest option is often using the included 'wall wart' transformer. This provides 12V for the board. To use this option:
+The recommended option is instead to power the board via the included 'wall wart' transformer that plugs into the barrel jack near ②. This provides 12V for the board. To use this option:
 
 1. Set switch SW2 (marked at ①) up to the `5V Regulator` option.
 2. Set switch SW (marked at ②) to the right towards the `Barrel` option.
 4. Plug the DC power adapter into the barrel jack at ②.
 5. Plug your USB-C cable from your host computer (via USB-A to USB-C adapter if required) into USB-C port near ③.
 6. Turn the `Control Power` switch ③ to the right to turn on the controller.
+7. Ensure target power switch at ④ is set to right in `Auto` option.
 
 If you insist on living dangerously, you can instead power everything from the single USB-C port with:
 
 1. Set switch SW2 (marked at ①) down to the `USB-C Data` option.
 2. Plug your USB-C cable from your host computer into USB-C port near ③.
 3. Turn the `Control Power` switch ③ to the right to turn on the controller.
+4. Ensure target power switch at ④ is set to right in `Auto` option.
 
 The `Status` led D23 should be blinking blue once the board is connected. If it appears as just solid blue try toggling the `Control Power` switch, or press the `USB RST` button. You may need to check your `udev` settings or wait for driver configuration.
 
@@ -97,7 +99,7 @@ The Bergen Board has two serial ports (just like FTDI serial adapters) that are 
 
 You can check what they appear as with `dmesg` - on the default Ubuntu configuration they appear as `\dev\ttyACM0` and `\dev\ttyACM1`. The second port is connected to the standard OpenTitan output (`\dev\ttyACM1` in these examples).
 
-You can use a serial program such as `minicom` or `screen` to connect at 115200 baud - be sure to disable software and hardware flow control if enabled by default. With screen for example we would use:
+You can use a serial program such as `minicom` or `screen` to connect at 115200 baud - be sure to disable software and hardware flow control. With screen for example we would use:
 
 ```console
 $ screen /dev/ttyACM1 115200,cs8,-ixon,-ixoff
@@ -135,7 +137,7 @@ Transferring frame 0x80000007 @ 0x000036E8.
 Loading done.
 ```
 
-If you just want to load new software, you can use the command `./util/bergenloader.py -fw <binary_file>`. Give it a shot by reloading the software running:
+If you just want to load new software, you can use the command `./util/bergenloader.py -fw <binary_file>`. Give it a shot by reloading the software:
 
 ```console
 $ cd $REPO_TOP
@@ -252,7 +254,7 @@ Finally, program in the software with:
 ./util/bergenloader.py -fw build-bin/sw/device/examples/hello_world/hello_world_fpga_nexysvideo.bin
 ```
 
-Observe the output both on the board and the serial console. Type any text into the console window.
+Observe the output both on the board and the serial console. Type any text into the console window. You can check the printed `hello_world.c:66] Built at:` message to confirm you are in fact running your own build, and not the original file.
 
 Exit `screen` by pressing CTRL-a k, and confirm with y.
 
@@ -266,6 +268,6 @@ The `--no-export` option of fusesoc disables copying the source files into the s
 
 ```console
 $ # only create Vivado project file
-$ fusesoc --cores-root . build --no-export --setup lowrisc:systems:top_earlgrey_nexysvideo
+$ fusesoc --cores-root . build --no-export --setup lowrisc:systems:top_earlgrey_bergen-k410t
 ```
 
