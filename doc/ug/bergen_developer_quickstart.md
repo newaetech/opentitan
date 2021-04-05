@@ -11,6 +11,7 @@ This guide is targeted at existing OpenTitan Developers who want to get up to sp
 In addition to this guide, see resources for this board at:
 * [CW310 Bergen Board Documentation](https://rtfm.newae.com/Targets/CW310%20Bergen%20Board/)
 * [CW310 Bergen Board github](https://github.com/newaetech/cw310-bergen-board)
+* [Getting Started with Bergen Board & OpenTitan]({{< relref "getting_started_bergen.md" >}})
 
 {{< /note >}}
 
