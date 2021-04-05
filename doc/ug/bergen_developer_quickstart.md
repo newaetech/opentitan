@@ -150,13 +150,12 @@ cd $REPO_TOP
 ./util/bergenloader.py -bs temp_build_cache/lowrisc_systems_top_earlgrey_bergen-k410t_0.1.bit -fw temp_build_cache/hello_world_fpga_nexysvideo.bin
 ```
 
-To view the output of this, run the serial command as:
+To view the output of this, run the `screen` command using the cheater script: 
 
 ```console
 cd $REPO_TOP
 sh util/bergen-serial.sh
 ```
-*NOTE FOR LATER: When adding this to newbie guide, add note about 'Use `Ctrl-A` then `/` to exit screen'*
 
 ## OT-Server Walk-Through
 

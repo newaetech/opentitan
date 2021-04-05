@@ -184,12 +184,11 @@ I00009 demos.c:50] GPIO switch #3 changed to 1
 I00010 demos.c:56] FTDI control changed. Enable JTAG.
 ```
 
-If so - you did it! You got OpenTitan running on the FPGA board. You can change the state of the first four user DIP switches, and if you type characters the first three LEDs
-will change state.
+If so - you did it! You got OpenTitan running on the FPGA board. You can change the
+state of the user DIP switches which will be refected in serial messages, and if you
+type characters the user LEDs will show the binary value of the ASCII character.
 
-**NOTE:** This can be fixed to use all LEDs, issue in current earlygrey top.
-
-Once done - read on to do a full build.
+Once you've seen the board work - read on to do a full build from source.
 
 ## Prerequisites
 
