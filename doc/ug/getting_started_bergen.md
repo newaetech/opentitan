@@ -12,6 +12,17 @@ when specifically targeting the ChipWhisperer CW310 "Bergen Board". It assumes l
 If you already have used OpenTitan, see the page [Bergen Board for OpenTitan Developers]({{< relref "bergen_developer_quickstart.md" >}}) which skips some of the
 setup information. You might want to read over this page for a background on how to plug in the Bergen Board still.
 
+
+{{< note title="CW310 Bergen Board Resources" >}}
+
+In addition to this guide, see resources for this board at:
+* [CW310 Bergen Board Documentation](https://rtfm.newae.com/Targets/CW310%20Bergen%20Board/)
+* [CW310 Bergen Board github](https://github.com/newaetech/cw310-bergen-board)
+* [Bergen Board for OpenTitan Developers]({{< relref "bergen_developer_quickstart.md" >}})
+
+{{< /note >}}
+
+
 ## About FPGA Bitstream & Software (Firmware) images
 
 You'll need to do two steps to work with OpenTitan on a FPGA board:
@@ -62,7 +73,7 @@ Then try running the `setup.py` file again. You may also need to `pip3 install s
 
 ### Physical Connections
 
-Place the Bergen Board in front of you and enjoy it in all it's glory. For more information on the Bergen Board see XXXX, this guide covers only what is required for
+Place the Bergen Board in front of you and enjoy it in all it's glory. For more information on the Bergen Board see [the NewAE manual](https://rtfm.newae.com/Targets/CW310%20Bergen%20Board/), this guide covers only what is required for
 OpenTitan usage.
 
 ![Bergen Board image](../bergen_board/img/bergenk410t_annotated_ot.jpg)
@@ -78,7 +89,7 @@ The first choice is the most convient, but requires you to plug the board into a
 The recommended option is instead to power the board via the included 'wall wart' transformer that plugs into the barrel jack near ②. This provides 12V for the board. To use this option:
 
 1. Set switch SW2 (marked at ①) up to the `5V Regulator` option.
-2. Set switch SW (marked at ②) to the right towards the `Barrel` option.
+2. Set switch (marked at ②) to the right towards the `Barrel` option.
 4. Plug the DC power adapter into the barrel jack at ②.
 5. Plug your USB-C cable from your host computer (via USB-A to USB-C adapter if required) into USB-C port near ③.
 6. Turn the `Control Power` switch ③ to the right to turn on the controller.
