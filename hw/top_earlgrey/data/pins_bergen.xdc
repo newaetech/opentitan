@@ -19,18 +19,27 @@ create_clock -add -name sys_clk_pin -period 10.00 -waveform {0 5} [get_ports IO_
 #set_property CLOCK_DEDICATED_ROUTE FALSE [get_nets IO_SDCK_IBUF]; # SDCK clock to be ignored
 
 ## LEDs
-set_property -dict { PACKAGE_PIN M26  DRIVE 8 IOSTANDARD LVCMOS33 } [get_ports { IO_GP8 }]; #LED 0 
-set_property -dict { PACKAGE_PIN M25  DRIVE 8 IOSTANDARD LVCMOS33 } [get_ports { IO_GP9 }]; #LED 1
-set_property -dict { PACKAGE_PIN M24  DRIVE 8 IOSTANDARD LVCMOS33 } [get_ports { IO_GP10}]; #LED 2
+set_property -dict { PACKAGE_PIN M26  DRIVE 8 IOSTANDARD LVCMOS33 } [get_ports { IO_GP8 }];  #LED 0 
+set_property -dict { PACKAGE_PIN M25  DRIVE 8 IOSTANDARD LVCMOS33 } [get_ports { IO_GP9 }];  #LED 1
+set_property -dict { PACKAGE_PIN M24  DRIVE 8 IOSTANDARD LVCMOS33 } [get_ports { IO_GP10}];  #LED 2
+set_property -dict { PACKAGE_PIN M19  DRIVE 8 IOSTANDARD LVCMOS33 } [get_ports { IO_GP11 }]; #LED 3
+set_property -dict { PACKAGE_PIN L25  DRIVE 8 IOSTANDARD LVCMOS33 } [get_ports { IO_GP12 }]; #LED 4
+set_property -dict { PACKAGE_PIN K26  DRIVE 8 IOSTANDARD LVCMOS33 } [get_ports { IO_GP13 }]; #LED 5
+set_property -dict { PACKAGE_PIN L24  DRIVE 8 IOSTANDARD LVCMOS33 } [get_ports { IO_GP14 }]; #LED 6
+set_property -dict { PACKAGE_PIN K25  DRIVE 8 IOSTANDARD LVCMOS33 } [get_ports { IO_GP15 }]; #LED 7
 
 ## Buttons
 set_property -dict { PACKAGE_PIN Y7 IOSTANDARD LVCMOS18 } [get_ports { IO_RST_N }]; #pushbutton SW2
 
 ## Switches
-set_property -dict { PACKAGE_PIN U9 IOSTANDARD LVCMOS18 } [get_ports { IO_GP0 }]; #USRDIP0
-set_property -dict { PACKAGE_PIN V7 IOSTANDARD LVCMOS18 } [get_ports { IO_GP1 }]; #USRDIP1
-set_property -dict { PACKAGE_PIN V8 IOSTANDARD LVCMOS18 } [get_ports { IO_GP2 }]; #USRDIP2
-set_property -dict { PACKAGE_PIN W9 IOSTANDARD LVCMOS18 } [get_ports { IO_GP3 }]; #USRDIP3
+set_property -dict { PACKAGE_PIN U9 IOSTANDARD LVCMOS18 }  [get_ports { IO_GP0 }]; #USRDIP0
+set_property -dict { PACKAGE_PIN V7 IOSTANDARD LVCMOS18 }  [get_ports { IO_GP1 }]; #USRDIP1
+set_property -dict { PACKAGE_PIN V8 IOSTANDARD LVCMOS18 }  [get_ports { IO_GP2 }]; #USRDIP2
+set_property -dict { PACKAGE_PIN W9 IOSTANDARD LVCMOS18 }  [get_ports { IO_GP3 }]; #USRDIP3
+set_property -dict { PACKAGE_PIN V9 IOSTANDARD LVCMOS18 }  [get_ports { IO_GP4 }]; #USRDIP4
+set_property -dict { PACKAGE_PIN W8 IOSTANDARD LVCMOS18 }  [get_ports { IO_GP5 }]; #USRDIP5
+set_property -dict { PACKAGE_PIN W10 IOSTANDARD LVCMOS18 } [get_ports { IO_GP6 }]; #USRDIP6
+set_property -dict { PACKAGE_PIN V11 IOSTANDARD LVCMOS18 } [get_ports { IO_GP7 }]; #USRDIP7
 
 ## SPI/JTAG
 set_property -dict { PACKAGE_PIN D26 IOSTANDARD LVCMOS33 } [get_ports { IO_DPS0 }]; #SCK (SPI1_SCK)
@@ -43,17 +52,6 @@ set_property -dict { PACKAGE_PIN W20 IOSTANDARD LVCMOS33 PULLTYPE PULLDOWN } [ge
 set_property -dict { PACKAGE_PIN U21 IOSTANDARD LVCMOS33 PULLTYPE PULLDOWN } [get_ports { IO_DPS7 }]; #Bootstrap (USB_A16)
 
 ## OTHER IO
-set_property -dict { PACKAGE_PIN C12 IOSTANDARD LVCMOS33 } [get_ports { IO_GP4  }]; #USERIOB-1
-set_property -dict { PACKAGE_PIN D13 IOSTANDARD LVCMOS33 } [get_ports { IO_GP5  }]; #USERIOB-3
-set_property -dict { PACKAGE_PIN C13 IOSTANDARD LVCMOS33 } [get_ports { IO_GP6  }]; #USERIOB-5
-set_property -dict { PACKAGE_PIN E13 IOSTANDARD LVCMOS33 } [get_ports { IO_GP7  }]; #USERIOB-7
-
-set_property -dict { PACKAGE_PIN B10 IOSTANDARD LVCMOS33 } [get_ports { IO_GP11 }]; #USERIOB-17
-set_property -dict { PACKAGE_PIN F10 IOSTANDARD LVCMOS33 } [get_ports { IO_GP12 }]; #USERIOB-6
-set_property -dict { PACKAGE_PIN H8  IOSTANDARD LVCMOS33 } [get_ports { IO_GP13 }]; #USERIOB-8
-set_property -dict { PACKAGE_PIN F8  IOSTANDARD LVCMOS33 } [get_ports { IO_GP14 }]; #USERIOB-10
-set_property -dict { PACKAGE_PIN F9  IOSTANDARD LVCMOS33 } [get_ports { IO_GP15 }]; #USERIOB-12
-
 set_property -dict { PACKAGE_PIN A8  IOSTANDARD LVCMOS33 } [get_ports { IO_GP24 }]; #USERIOB-9
 set_property -dict { PACKAGE_PIN B9  IOSTANDARD LVCMOS33 } [get_ports { IO_GP25 }]; #USERIOB-11
 set_property -dict { PACKAGE_PIN A9  IOSTANDARD LVCMOS33 } [get_ports { IO_GP26 }]; #USERIOB-15
