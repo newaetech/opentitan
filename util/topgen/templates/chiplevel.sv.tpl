@@ -370,7 +370,7 @@ module top_${top["name"]}_${target["name"]} (
 ###################################################################
 ## USB for Nexysvideo                                            ##
 ###################################################################
-% if target["name"] == "nexysvideo":
+% if target["name"] in ["nexysvideo", "bergen"]:
 
   /////////////////////
   // USB Overlay Mux //
@@ -995,7 +995,7 @@ module top_${top["name"]}_${target["name"]} (
 ###################################################################
 ## FPGA shared                                                   ##
 ###################################################################
-% if target["name"] in ["cw305", "nexysvideo"]:
+% if target["name"] in ["cw305", "nexysvideo", "bergen"]:
   //////////////////
   // PLL for FPGA //
   //////////////////
