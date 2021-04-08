@@ -59,7 +59,7 @@ targets:
     filesets:
       - files_rtl_bergen
       - files_constraints
-    toplevel: top_earlgrey_bergen
+    toplevel: chip_earlgrey_bergen
     parameters:
       - BootRomInitFile
       - OtpCtrlMemInitFile
