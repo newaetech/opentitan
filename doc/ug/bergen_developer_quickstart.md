@@ -95,7 +95,7 @@ The microcontroller communication is done with a Python API that is part of Chip
 To load a FPGA bitstream for example:
 
 ```console
-./util/bergenloader.py -bs build/lowrisc_systems_top_earlgrey_bergen-k410t_0.1/synth-vivado/lowrisc_systems_top_earlgrey_bergen-k410t_0.1.bit
+./util/bergenloader.py -bs build/lowrisc_systems_chip_earlgrey_bergen-k410t_0.1/synth-vivado/lowrisc_systems_chip_earlgrey_bergen-k410t_0.1.bit
 ```
 
 This will take 5-20 seconds to execute. After, you can simply load software images as such:
@@ -127,18 +127,18 @@ $ . /tools/xilinx/Vivado/2020.1/settings64.sh
 $ cd $REPO_TOP
 $ ./meson_init.sh
 $ ninja -C build-out all
-$ fusesoc --cores-root . run --flag=fileset_top --target=synth lowrisc:systems:top_earlgrey_bergen-k410t
+$ fusesoc --cores-root . run --flag=fileset_top --target=synth lowrisc:systems:chip_earlgrey_bergen-k410t
 ```
 
 Note the following:
 
-* There is no need to run the `top_earlygrey_reduce` script for this build.
+* There is no need to run the `chip_earlygrey_reduce` script for this build.
 * The board is specified as `bergen-k410t`, since there are two sizes of FPGA allowed on the boards.
 
 You could then load the examples as above using the `bergenloader` utility:
 
 ```console
-./util/bergenloader.py -bs build/lowrisc_systems_top_earlgrey_bergen-k410t_0.1/synth-vivado/lowrisc_systems_top_earlgrey_bergen-k410t_0.1.bit -fw build-bin/sw/device/examples/hello_world/hello_world_fpga_nexysvideo.bin
+./util/bergenloader.py -bs build/lowrisc_systems_chip_earlgrey_bergen-k410t_0.1/synth-vivado/lowrisc_systems_chip_earlgrey_bergen-k410t_0.1.bit -fw build-bin/sw/device/examples/hello_world/hello_world_fpga_nexysvideo.bin
 ```
 
 ### Running Provided Software
@@ -147,7 +147,7 @@ Premade binaries are provided in the branch currently. For example the hello-wor
 
 ```console
 cd $REPO_TOP
-./util/bergenloader.py -bs temp_build_cache/lowrisc_systems_top_earlgrey_bergen-k410t_0.1.bit -fw temp_build_cache/hello_world_fpga_nexysvideo.bin
+./util/bergenloader.py -bs temp_build_cache/lowrisc_systems_chip_earlgrey_bergen-k410t_0.1.bit -fw temp_build_cache/hello_world_fpga_nexysvideo.bin
 ```
 
 To view the output of this, run the `screen` command using the cheater script: 
@@ -201,14 +201,14 @@ Then in another session/console:
 
 ```console
 cd $REPO_TOP
-./util/bergenloader.py -bs temp_build_cache/lowrisc_systems_top_earlgrey_bergen-k410t_0.1.bit
+./util/bergenloader.py -bs temp_build_cache/lowrisc_systems_chip_earlgrey_bergen-k410t_0.1.bit
 ```
 
 This will take 5-20 seconds. It should output a message such as this during operation:
 
 ```
 Bergen Loader: Attemping to find CW310 Bergen Board:
-    Using bitstream :temp_build_cache/lowrisc_systems_top_earlgrey_bergen-k410t_0.1.bit
+    Using bitstream :temp_build_cache/lowrisc_systems_chip_earlgrey_bergen-k410t_0.1.bit
 Board found, setting PLL2 to 100 MHz
 Loading done.
 ```
@@ -305,7 +305,7 @@ cd $REPO_TOP
 If you haven't loaded the FPGA yet, you could load them both at once with:
 
 ```
-./util/bergenloader.py -fw temp_build_cache/hello_usbdev_fpga_nexysvideo.bin -bs temp_build_cache/lowrisc_systems_top_earlgrey_bergen-k410t_0.1.bit
+./util/bergenloader.py -fw temp_build_cache/hello_usbdev_fpga_nexysvideo.bin -bs temp_build_cache/lowrisc_systems_chip_earlgrey_bergen-k410t_0.1.bit
 ```
 
 Now run the power cycle script to unplug/replug the opentitan to trigger the enumeration:
