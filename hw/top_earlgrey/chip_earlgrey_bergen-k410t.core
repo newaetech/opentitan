@@ -2,7 +2,7 @@ CAPI=2:
 # Copyright lowRISC contributors.
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
-name: "lowrisc:systems:top_earlgrey_bergen-k410t:0.1"
+name: "lowrisc:systems:chip_earlgrey_bergen-k410t:0.1"
 description: "Earl Grey toplevel for the CW310 Bergen board"
 filesets:
   files_rtl_bergen:
@@ -11,7 +11,7 @@ filesets:
       - lowrisc:systems:top_earlgrey_pkg
     files:
       - rtl/clkgen_xil7series.sv
-      - rtl/autogen/top_earlgrey_bergen.sv
+      - rtl/autogen/chip_earlgrey_bergen.sv
     file_type: systemVerilogSource
 
   files_constraints:
@@ -42,7 +42,6 @@ parameters:
     description: Boot ROM initialization file in 32 bit vmem hex format
     default: "../../../../../build-bin/sw/device/boot_rom/boot_rom_fpga_nexysvideo.32.vmem"
     paramtype: vlogparam
-  # For value definition, please see ip/prim/rtl/prim_pkg.sv
   OtpCtrlMemInitFile:
     datatype: str
     description: OTP initialization file in vmem hex format
@@ -67,4 +66,4 @@ targets:
       - PRIM_DEFAULT_IMPL=prim_pkg::ImplXilinx
     tools:
       vivado:
-        part: "xc7k410tfbg676-2" # CW310 Board (Bergen Board) with K410T
+        part: "xc7k410tfbg676-1" # CW310 Board (Bergen Board) with K410T
