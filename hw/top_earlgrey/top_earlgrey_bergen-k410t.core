@@ -11,7 +11,7 @@ filesets:
       - lowrisc:systems:top_earlgrey_pkg
     files:
       - rtl/clkgen_xil7series.sv
-      - rtl/top_earlgrey_bergen.sv
+      - rtl/autogen/top_earlgrey_bergen.sv
     file_type: systemVerilogSource
 
   files_constraints:
