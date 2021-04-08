@@ -39,9 +39,12 @@ package otp_ctrl_part_pkg;
 
   parameter int NumScrmblKeys = ${len(otp_mmap.config["scrambling"]["keys"])};
   parameter int NumDigestSets = ${len(otp_mmap.config["scrambling"]["digests"])};
-  parameter int ConstSelWidth = (NumScrmblKeys > NumDigestSets) ?
-                                vbits(NumScrmblKeys) :
-                                vbits(NumDigestSets);
+
+  parameter int ScrmblKeySelWidth = vbits(NumScrmblKeys);
+  parameter int DigestSetSelWidth = vbits(NumDigestSets);
+  parameter int ConstSelWidth = (ScrmblKeySelWidth > DigestSetSelWidth) ?
+                                ScrmblKeySelWidth :
+                                DigestSetSelWidth;
 
   typedef enum logic [ConstSelWidth-1:0] {
     StandardMode,
@@ -108,6 +111,17 @@ package otp_ctrl_part_pkg;
     logic write_lock; // Whether the partition is write lockable (via digest)
     logic read_lock;  // Whether the partition is read lockable (via digest)
   } part_info_t;
+
+  parameter part_info_t PartInfoDefault = '{
+      variant:    Unbuffered,
+      offset:     '0,
+      size:       OtpByteAddrWidth'('hFF),
+      key_sel:    key_sel_e'('0),
+      secret:     1'b0,
+      hw_digest:  1'b0,
+      write_lock: 1'b0,
+      read_lock:  1'b0
+  };
 
   ////////////////////////
   // Partition Metadata //

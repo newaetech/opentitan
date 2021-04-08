@@ -598,7 +598,7 @@ module spi_device (
 
     // Config (changed dynamically)
     .order_i      (rxorder),
-    .io_mode_i    (io_mode_outclk)
+    .io_mode_i    (io_mode)
   );
 
   spi_p2s u_p2s (
@@ -625,8 +625,8 @@ module spi_device (
     .FifoWidth (FifoWidth),
     .FifoDepth (FifoDepth)
   ) u_fwmode (
-    .clk_i,
-    .rst_ni,
+    .clk_i    (sram_clk),
+    .rst_ni   (sram_rst_n),
 
     .clk_spi_in_i  (clk_spi_in_buf),
     .rst_rxfifo_ni (rst_rxfifo_n),
@@ -776,6 +776,7 @@ module spi_device (
     .tl_o        (tl_sram_d2h [0]),
     .en_ifetch_i (tlul_pkg::InstrDis),
     .req_o       (mem_a_req),
+    .req_type_o  (),
     .gnt_i       (mem_a_req),  //Always grant when request
     .we_o        (mem_a_write),
     .addr_o      (mem_a_addr),

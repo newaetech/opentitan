@@ -13,7 +13,7 @@ module otp_ctrl_lci
   import otp_ctrl_part_pkg::*;
 #(
   // Lifecycle partition information
-  parameter part_info_t Info = part_info_t'(0)
+  parameter part_info_t Info = PartInfoDefault
 ) (
   input                                     clk_i,
   input                                     rst_ni,
@@ -27,8 +27,7 @@ module otp_ctrl_lci
   // Note that a transition request will fail if the request attempts to
   // clear already programmed bits within OTP.
   input                                     lc_req_i,
-  input  lc_ctrl_state_pkg::lc_state_e      lc_state_i,
-  input  lc_ctrl_state_pkg::lc_cnt_e        lc_count_i,
+  input  logic [Info.size*8-1:0]            lc_data_i,
   output logic                              lc_ack_o,
   output logic                              lc_err_o,
   // Output error state of partition, to be consumed by OTP error/alert logic.
@@ -56,6 +55,9 @@ module otp_ctrl_lci
 
   localparam int NumLcOtpWords = int'(Info.size) >> OtpAddrShift;
   localparam int CntWidth = vbits(NumLcOtpWords);
+
+  localparam int unsigned LastLcOtpWordInt = NumLcOtpWords - 1;
+  localparam bit [CntWidth-1:0] LastLcOtpWord = LastLcOtpWordInt[CntWidth-1:0];
 
   // This is required, since each native OTP word can only be programmed once.
   `ASSERT_INIT(LcValueMustBeWiderThanNativeOtpWidth_A, lc_ctrl_state_pkg::LcValueWidth >= OtpWidth)
@@ -166,7 +168,7 @@ module otp_ctrl_lci
 
           // Check whether we programmed all OTP words.
           // If yes, we are done and can go back to idle.
-          if (cnt_q == NumLcOtpWords-1) begin
+          if (cnt_q == LastLcOtpWord) begin
             state_d = IdleSt;
             lc_ack_o = 1'b1;
             // If in any of the words a programming error has occurred,
@@ -187,7 +189,7 @@ module otp_ctrl_lci
       // Make sure the partition signals an error state if no error
       // code has been latched so far, and lock the buffer regs down.
       ErrorSt: begin
-        if (!error_q) begin
+        if (error_q == NoError) begin
           error_d = FsmStateError;
         end
       end
@@ -218,15 +220,16 @@ module otp_ctrl_lci
   assign cnt_d = (cnt_clr) ? '0           :
                  (cnt_en)  ? cnt_q + 1'b1 : cnt_q;
 
-  // Note that OTP works on halfword (16bit) addresses, hence need to
-  // shift the addresses appropriately.
-  assign otp_addr_o = (Info.offset >> OtpAddrShift) + cnt_q;
+  // The output address is "offset + count", but we have to convert Info.offset from a byte address
+  // to a halfword (16-bit) address by discarding the bottom OtpAddrShift bits. We also make the
+  // zero-extension of cnt_q explicit (to avoid width mismatch warnings).
+  assign otp_addr_o = Info.offset[OtpByteAddrWidth-1:OtpAddrShift] + OtpAddrWidth'(cnt_q);
 
   // Always transfer 16bit blocks.
   assign otp_size_o = '0;
 
   logic [NumLcOtpWords-1:0][OtpWidth-1:0] data;
-  assign data        = {lc_count_i, lc_state_i};
+  assign data        = lc_data_i;
   assign otp_wdata_o = (otp_req_o) ? OtpIfWidth'(data[cnt_q]) : '0;
 
   logic unused_rdata;

@@ -184,6 +184,7 @@ module otbn
     .tl_o        (tl_win_d2h[TlWinImem]),
     .en_ifetch_i (tlul_pkg::InstrDis),
     .req_o       (imem_req_bus   ),
+    .req_type_o  (),
     .gnt_i       (imem_gnt_bus   ),
     .we_o        (imem_write_bus ),
     .addr_o      (imem_index_bus ),
@@ -234,11 +235,6 @@ module otbn
   // seems a bit fragile, so we err on the side of caution.
   assign imem_rerror_bus  = !imem_access_core ? {imem_rerror, 1'b0} : 2'b00;
   assign imem_rerror_core = imem_rerror;
-
-  // The top bits of IMEM rdata aren't currently used (they will eventually be used for integrity
-  // checks both on the bus and within the core)
-  logic unused_imem_top_rdata;
-  assign unused_imem_top_rdata = &{1'b0, imem_rdata[38:32]};
 
   // Data Memory (DMEM) ========================================================
 
@@ -325,6 +321,7 @@ module otbn
     .tl_o        (tl_win_d2h[TlWinDmem]),
     .en_ifetch_i (tlul_pkg::InstrDis   ),
     .req_o       (dmem_req_bus         ),
+    .req_type_o  (),
     .gnt_i       (dmem_gnt_bus         ),
     .we_o        (dmem_write_bus       ),
     .addr_o      (dmem_index_bus       ),

@@ -162,9 +162,15 @@ set SPI_DEV_TCK 16.0
 create_clock -name SPI_DEV_CLK  -period ${SPI_DEV_TCK} [get_ports ${SPI_DEV_CLK_PIN}]
 set_clock_uncertainty ${SETUP_CLOCK_UNCERTAINTY} [get_clocks SPI_DEV_CLK]
 
+create_generated_clock -name SPI_DEV_IN_CLK -source SPI_DEV_CLK -divide_by 1 \
+    [get_pins top_earlgrey/u_spi_device/u_clk_spi_in_buf/clk_o]
+create_generated_clock -name SPI_DEV_OUT_CLK -source SPI_DEV_CLK -divide_by 1 \
+    -invert [get_pins top_earlgrey/u_spi_device/u_clk_spi_out_buf/clk_o]
+
 ## TODO: these are dummy constraints and likely incorrect, need to properly constrain min/max
-set SPI_DEV_IN_DEL_FRACTION 0.7
-set SPI_DEV_OUT_DEL_FRACTION 0.7
+# FRACTION is reduced to 0.2 as internal datapath for SPI is half clk period
+set SPI_DEV_IN_DEL_FRACTION 0.2
+set SPI_DEV_OUT_DEL_FRACTION 0.2
 set SPI_DEV_IN_DEL    [expr ${SPI_DEV_IN_DEL_FRACTION} * ${SPI_DEV_TCK}]
 set SPI_DEV_OUT_DEL   [expr ${SPI_DEV_OUT_DEL_FRACTION} * ${SPI_DEV_TCK}]
 
@@ -180,6 +186,13 @@ set_output_delay ${SPI_DEV_OUT_DEL} [get_ports SPI_DEV_D0]   -clock SPI_DEV_CLK
 set_output_delay ${SPI_DEV_OUT_DEL} [get_ports SPI_DEV_D1]   -clock SPI_DEV_CLK
 set_output_delay ${SPI_DEV_OUT_DEL} [get_ports SPI_DEV_D2]   -clock SPI_DEV_CLK
 set_output_delay ${SPI_DEV_OUT_DEL} [get_ports SPI_DEV_D3]   -clock SPI_DEV_CLK
+
+# False path from CSb to return to host as CSb for that path behaves as reset.
+#set_ideal_network [get_pins top_earlgrey/u_spi_device/u_csb_rst_scan_mux/clk_o]
+set_false_path -through [get_pins top_earlgrey/u_spi_device/cio_csb_i] \
+               -through [get_pins top_earlgrey/u_spi_device/cio_sd_en_o*]
+set_false_path -through [get_pins top_earlgrey/u_spi_device/cio_csb_i] \
+               -through [get_pins top_earlgrey/u_spi_device/cio_sd_o*]
 
 #####################
 # SPI HOST clock   #
@@ -244,16 +257,17 @@ set_max_delay ${SPI_HIDO_PASS_MAX_DELAY} -from [get_ports SPI_HOST_D3] -to [get_
 #####################
 
 # this may need some refinement (and max delay / skew needs to be constrained)
-set_clock_groups -name group1 -async -group [get_clocks MAIN_CLK     ] \
-                                     -group [get_clocks USB_CLK      ] \
-                                     -group [get_clocks SPI_DEV_CLK  ] \
-                                     -group [get_clocks SPI_HOST_CLK ] \
-                                     -group [get_clocks IO_CLK       ] \
-                                     -group [get_clocks IO_DIV2_CLK  ] \
-                                     -group [get_clocks IO_DIV4_CLK  ] \
-                                     -group [get_clocks RNG_CLK      ] \
-                                     -group [get_clocks JTAG_TCK     ] \
-                                     -group [get_clocks AON_CLK      ]
+set_clock_groups -name group1 -async                                  \
+    -group [get_clocks MAIN_CLK                                     ] \
+    -group [get_clocks USB_CLK                                      ] \
+    -group [get_clocks {SPI_DEV_CLK SPI_DEV_IN_CLK SPI_DEV_OUT_CLK} ] \
+    -group [get_clocks SPI_HOST_CLK                                 ] \
+    -group [get_clocks IO_CLK                                       ] \
+    -group [get_clocks IO_DIV2_CLK                                  ] \
+    -group [get_clocks IO_DIV4_CLK                                  ] \
+    -group [get_clocks RNG_CLK                                      ] \
+    -group [get_clocks JTAG_TCK                                     ] \
+    -group [get_clocks AON_CLK                                      ]
 
 # UART loopback path can be considered to be a false path
 set_false_path -through [get_pins top_earlgrey/u_uart*/cio_rx_i] -through [get_pins top_earlgrey/u_uart*/cio_tx_o]
@@ -297,6 +311,5 @@ puts "Done applying constraints for top level"
 # Case analysis for quasi-static signals #
 ##########################################
 
-# assume a value of 0 for the pad attribute at index [9]
-#set_case_analysis 0 [get_pins u_padring/u_*_pad/attr_i[9]]
-set_case_analysis 0 [get_pins u_padring/gen_*gen_*u_*_pad/attr_i[9]]
+# assume a value of 0 for the open drain pad attribute
+set_case_analysis 0 [get_pins u_padring/*_pad/attr_i\[od_en\]]

@@ -10,11 +10,12 @@
 // Most of the items are TODO, at the moment only arbitration logic exists.
 
 module flash_phy_core import flash_phy_pkg::*; #(
-  parameter int ArbCnt       = 4
+  parameter int unsigned ArbCnt = 4
 ) (
   input                              clk_i,
   input                              rst_ni,
   input                              host_req_i,   // host request - read only
+  input tlul_pkg::tl_type_e          host_req_type_i,
   input                              host_scramble_en_i,
   input                              host_ecc_en_i,
   input [BusBankAddrW-1:0]           host_addr_i,
@@ -22,6 +23,7 @@ module flash_phy_core import flash_phy_pkg::*; #(
   input                              scramble_en_i,
   input                              ecc_en_i,
   input                              he_en_i,
+  input                              ecc_multi_err_en_i,
   input                              rd_i,
   input                              prog_i,
   input                              pg_erase_i,
@@ -65,6 +67,9 @@ module flash_phy_core import flash_phy_pkg::*; #(
 
   // request signals to flash macro
   logic [PhyOps-1:0] reqs;
+
+  // the type of transaction to flash macro
+  tlul_pkg::tl_type_e muxed_req_type;
 
   // host select for address
   logic host_sel;
@@ -113,7 +118,7 @@ module flash_phy_core import flash_phy_pkg::*; #(
   logic op_ack;
   logic [DataWidth-1:0] scramble_mask;
 
-  assign host_req_masked = host_req_i & (arb_cnt < ArbCnt);
+  assign host_req_masked = host_req_i & (arb_cnt < ArbCnt[CntWidth-1:0]);
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
@@ -225,6 +230,8 @@ module flash_phy_core import flash_phy_pkg::*; #(
     endcase // unique case (state_q)
   end // always_comb
 
+  // transactions coming from flash controller are always data type
+  assign muxed_req_type = host_sel ? host_req_type_i : tlul_pkg::DataType;
   assign muxed_addr = host_sel ? host_addr_i : addr_i;
   assign muxed_part = host_sel ? flash_ctrl_pkg::FlashPartData : part_i;
   assign muxed_scramble_en = host_sel ? host_scramble_en_i : scramble_en_i;
@@ -249,7 +256,9 @@ module flash_phy_core import flash_phy_pkg::*; #(
     .clk_i,
     .rst_ni,
     .buf_en_i(rd_buf_en_i),
+    .ecc_multi_err_en_i,
     .req_i(reqs[PhyRead]),
+    .req_type_i(muxed_req_type),
     .descramble_i(muxed_scramble_en),
     .ecc_i(muxed_ecc_en),
     .prog_i(reqs[PhyProg]),

@@ -45,7 +45,7 @@ class otp_ctrl_smoke_vseq extends otp_ctrl_base_vseq;
     if (part_idx inside {[Secret0Idx:Secret2Idx]}) dai_addr % 8 == 0;
   }
 
-  constraint num_iterations_c {
+  constraint num_trans_c {
     num_trans  inside {[1:20]};
     num_dai_op inside {[1:50]};
   }
@@ -65,8 +65,8 @@ class otp_ctrl_smoke_vseq extends otp_ctrl_base_vseq;
 
   virtual task dut_init(string reset_kind = "HARD");
     if (do_reset_in_seq && do_apply_reset) begin
-      super.dut_init(reset_kind);
       lc_prog_blocking = 1;
+      super.dut_init(reset_kind);
       csr_wr(ral.intr_enable, en_intr);
     end
   endtask

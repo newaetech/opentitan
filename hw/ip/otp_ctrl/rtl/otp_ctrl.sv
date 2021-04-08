@@ -197,7 +197,8 @@ module otp_ctrl
     .intg_error_o(                    ),
     .rdata_i     (  tlul_rdata        ),
     .rvalid_i    (  tlul_rvalid       ),
-    .rerror_i    (  tlul_rerror       )
+    .rerror_i    (  tlul_rerror       ),
+    .req_type_o  (                    )
   );
 
   logic [NumPart-1:0] tlul_part_sel_oh;
@@ -838,6 +839,12 @@ module otp_ctrl
   // Lifecycle Transition Interface //
   ////////////////////////////////////
 
+  logic [PartInfo[LifeCycleIdx].size-1:0][7:0] lc_otp_program_data;
+  assign lc_otp_program_data[LcStateOffset-LifeCycleOffset +: LcStateSize] =
+      lc_otp_program_i.state;
+  assign lc_otp_program_data[LcTransitionCntOffset-LifeCycleOffset +: LcTransitionCntSize] =
+      lc_otp_program_i.count;
+
   otp_ctrl_lci #(
     .Info(PartInfo[LifeCycleIdx])
   ) u_otp_ctrl_lci (
@@ -848,8 +855,7 @@ module otp_ctrl
     .error_o          ( part_error[LciIdx]                ),
     .lci_prog_idle_o  ( lci_prog_idle                     ),
     .lc_req_i         ( lc_otp_program_i.req              ),
-    .lc_state_i       ( lc_otp_program_i.state            ),
-    .lc_count_i       ( lc_otp_program_i.count            ),
+    .lc_data_i        ( lc_otp_program_data               ),
     .lc_ack_o         ( lc_otp_program_o.ack              ),
     .lc_err_o         ( lc_otp_program_o.err              ),
     .otp_req_o        ( part_otp_arb_req[LciIdx]          ),

@@ -21,9 +21,12 @@ package otp_ctrl_part_pkg;
 
   parameter int NumScrmblKeys = 3;
   parameter int NumDigestSets = 5;
-  parameter int ConstSelWidth = (NumScrmblKeys > NumDigestSets) ?
-                                vbits(NumScrmblKeys) :
-                                vbits(NumDigestSets);
+
+  parameter int ScrmblKeySelWidth = vbits(NumScrmblKeys);
+  parameter int DigestSetSelWidth = vbits(NumDigestSets);
+  parameter int ConstSelWidth = (ScrmblKeySelWidth > DigestSetSelWidth) ?
+                                ScrmblKeySelWidth :
+                                DigestSetSelWidth;
 
   typedef enum logic [ConstSelWidth-1:0] {
     StandardMode,
@@ -96,6 +99,17 @@ package otp_ctrl_part_pkg;
     logic write_lock; // Whether the partition is write lockable (via digest)
     logic read_lock;  // Whether the partition is read lockable (via digest)
   } part_info_t;
+
+  parameter part_info_t PartInfoDefault = '{
+      variant:    Unbuffered,
+      offset:     '0,
+      size:       OtpByteAddrWidth'('hFF),
+      key_sel:    key_sel_e'('0),
+      secret:     1'b0,
+      hw_digest:  1'b0,
+      write_lock: 1'b0,
+      read_lock:  1'b0
+  };
 
   ////////////////////////
   // Partition Metadata //
@@ -231,8 +245,8 @@ package otp_ctrl_part_pkg;
   // OTP invalid partition default for buffered partitions.
   parameter logic [16383:0] PartInvDefault = 16384'({
     448'({
-      256'h1D00E175E3739EC1DAAF8720F255C5C84D1D9C10648A878DB1D5ABE9610E8395,
-      192'h490EC23C0A1EDCCE280E8ECA88CEA2E99470329E17324EDB
+      192'h1D00E175E3739EC1DAAF8720F255C5C84D1D9C10648A878D,
+      256'hB1D5ABE9610E8395490EC23C0A1EDCCE280E8ECA88CEA2E99470329E17324EDB
     }),
     704'({
       64'h1E2960279AB8F882,
