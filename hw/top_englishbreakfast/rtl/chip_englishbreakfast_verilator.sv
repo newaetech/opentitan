@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
-module top_englishbreakfast_verilator (
+module chip_englishbreakfast_verilator (
   // Clock and Reset
   input clk_i,
   input rst_ni
@@ -351,4 +351,4 @@ module top_englishbreakfast_verilator (
   `undef RV_CORE_IBEX
   `undef SIM_SRAM_IF
 
-endmodule
+endmodule : chip_englishbreakfast_verilator

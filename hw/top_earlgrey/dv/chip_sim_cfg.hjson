@@ -6,7 +6,7 @@
   name: chip
 
   // Top level dut name (sv module).
-  dut: top_earlgrey_asic
+  dut: chip_earlgrey_asic
 
   // Top level testbench name (sv module).
   tb: tb
@@ -178,6 +178,12 @@
       name: chip_aes_encr
       uvm_test_seq: chip_sw_base_vseq
       sw_images: ["sw/device/tests/aes_test:1"]
+      en_run_modes: ["sw_test_mode"]
+    }
+    {
+      name: chip_dif_entropy_smoketest
+      uvm_test_seq: chip_sw_base_vseq
+      sw_images: ["sw/device/tests/dif_entropy_smoketest:1"]
       en_run_modes: ["sw_test_mode"]
     }
     {

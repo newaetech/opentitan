@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
-module top_earlgrey_verilator (
+module chip_earlgrey_verilator (
   // Clock and Reset
   input clk_i,
   input rst_ni
@@ -30,9 +30,9 @@ module top_earlgrey_verilator (
   logic IO_JTCK, IO_JTMS, IO_JTRST_N, IO_JTDI, IO_JTDO;
 
   // TODO: instantiate padring and route these signals through that module
-  logic [20:0] dio_in;
-  logic [20:0] dio_out;
-  logic [20:0] dio_oe;
+  logic [pinmux_pkg::NDioPads-1:0] dio_in;
+  logic [pinmux_pkg::NDioPads-1:0] dio_out;
+  logic [pinmux_pkg::NDioPads-1:0] dio_oe;
 
   always_comb begin : assign_dio_in
     dio_in = '0;
@@ -65,13 +65,15 @@ module top_earlgrey_verilator (
   assign cio_usbdev_se0_en_d2p = dio_oe[DioUsbdevSe0];
   assign cio_spi_device_sdo_en_d2p = dio_oe[DioSpiDeviceSd1];
 
-  logic [43:0] mio_in;
-  logic [43:0] mio_out;
-  logic [43:0] mio_oe;
+  logic [pinmux_pkg::NMioPads-1:0] mio_in;
+  logic [pinmux_pkg::NMioPads-1:0] mio_out;
+  logic [pinmux_pkg::NMioPads-1:0] mio_oe;
 
-  assign mio_in = {11'h0,
-                   cio_uart_rx_p2d,
-                   cio_gpio_p2d};
+  always_comb begin : assign_mio_in
+    mio_in = '0;
+    mio_in[32] = cio_uart_rx_p2d;
+    mio_in[31:0] = cio_gpio_p2d;
+  end
 
   assign cio_gpio_d2p       = mio_out[31:0];
   assign cio_gpio_en_d2p    = mio_oe[31:0];
@@ -352,4 +354,4 @@ module top_earlgrey_verilator (
   `undef RV_CORE_IBEX
   `undef SIM_SRAM_IF
 
-endmodule
+endmodule : chip_earlgrey_verilator
