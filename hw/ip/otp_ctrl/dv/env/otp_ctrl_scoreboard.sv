@@ -16,6 +16,9 @@ class otp_ctrl_scoreboard extends cip_base_scoreboard #(
   bit [LC_PROG_DATA_SIZE-1:0] otp_lc_data;
   bit [EDN_BUS_WIDTH-1:0]     edn_data_q[$];
 
+  // This flag is used when reset is issued during otp dai write access.
+  bit dai_wr_ip;
+
   // This bit is used for DAI interface to mark if the read access is valid.
   bit dai_read_valid;
 
@@ -145,6 +148,12 @@ class otp_ctrl_scoreboard extends cip_base_scoreboard #(
             if (cfg.otp_ctrl_vif.lc_esc_on == 0) begin
               `DV_CHECK_EQ(cfg.otp_ctrl_vif.keymgr_key_o, exp_keymgr_data)
             end
+
+            if (cfg.en_cov) begin
+              bit [NumPart-2:0] parts_locked;
+              foreach (parts_locked[i]) parts_locked[i] = (get_otp_digest_val(i) != 0);
+              cov.power_on_cg.sample(cfg.otp_ctrl_vif.lc_esc_on, parts_locked);
+            end
           end
         end
       end
@@ -196,6 +205,8 @@ class otp_ctrl_scoreboard extends cip_base_scoreboard #(
 
       // LC program request data is valid means no OTP macro error.
       `DV_CHECK_EQ(rcv_item.d_data, exp_err_bit)
+
+      if (cfg.en_cov) cov.lc_prog_cg.sample(exp_err_bit);
     end
   endtask
 
@@ -269,6 +280,8 @@ class otp_ctrl_scoreboard extends cip_base_scoreboard #(
         exp_key = {exp_key_higher, exp_key_lower};
         `DV_CHECK_EQ(key, exp_key, "otbn key mismatch")
 
+        if (cfg.en_cov) cov.otbn_req_cg.sample(part_locked);
+
       // If during OTBN key request, the LFSR timer expired and trigger an EDN request to acquire
       // two EDN keys, then ignore the OTBN output checking, because scb did not know which EDN
       // keys are used for LFSR.
@@ -320,6 +333,8 @@ class otp_ctrl_scoreboard extends cip_base_scoreboard #(
                            .final_const(RndCnstDigestConst[sel_flash]));
           exp_key = {exp_key_higher, exp_key_lower};
           `DV_CHECK_EQ(key, exp_key, $sformatf("flash %s key mismatch", sel_flash.name()))
+
+          if (cfg.en_cov) cov.flash_req_cg.sample(sel_flash, part_locked);
         end
       join_none;
     end
@@ -369,6 +384,8 @@ class otp_ctrl_scoreboard extends cip_base_scoreboard #(
                              .num_round(2));
             exp_key = {exp_key_higher, exp_key_lower};
             `DV_CHECK_EQ(key, exp_key, $sformatf("sram_%0d key mismatch", index))
+            if (cfg.en_cov) cov.sram_req_cg.sample(index, part_locked);
+
           end else if ((edn_data_q.size() - NUM_SRAM_EDN_REQ) % 2 != 0) begin
             `uvm_error(`gfn, $sformatf("Unexpected edn_data_q size (%0d) during SRAM request",
                                        edn_data_q.size()))
@@ -379,7 +396,7 @@ class otp_ctrl_scoreboard extends cip_base_scoreboard #(
     end
   endtask
 
-  virtual task process_tl_access(tl_seq_item item, tl_channels_e channel = DataChannel);
+  virtual task process_tl_access(tl_seq_item item, tl_channels_e channel, string ral_name);
     uvm_reg     csr;
     dv_base_reg dv_reg;
     bit         do_read_check = 1;
@@ -393,7 +410,7 @@ class otp_ctrl_scoreboard extends cip_base_scoreboard #(
     bit data_phase_write  = (write && channel == DataChannel);
 
     // if access was to a valid csr, get the csr handle
-    if (csr_addr inside {cfg.csr_addrs}) begin
+    if (csr_addr inside {cfg.csr_addrs[ral_name]}) begin
       csr = ral.default_map.get_reg_by_offset(csr_addr);
       `DV_CHECK_NE_FATAL(csr, null)
       `downcast(dv_reg, csr)
@@ -504,6 +521,14 @@ class otp_ctrl_scoreboard extends cip_base_scoreboard #(
                   // DAI interface access error, even though injected ECC error, it won't be read
                   // out and detected. (TODO: can remove this once ECC is adopted in mem_bkdr_if)
                   cfg.ecc_err = OtpNoEccErr;
+
+                // If the partition is secret2 and lc_creator_seed_sw_rw is disable, then cannot
+                // return access error.
+                end else if (part_idx == Secret2Idx &&
+                             cfg.otp_ctrl_vif.lc_creator_seed_sw_rw_en_i == lc_ctrl_pkg::Off &&
+                             !is_digest(dai_addr)) begin
+                  predict_err(OtpDaiErrIdx, OtpAccessError);
+                  predict_rdata(is_secret(dai_addr) || is_digest(dai_addr), 0, 0);
                 end else begin
                   bit [TL_AW-1:0] otp_addr = get_scb_otp_addr();
                   if (cfg.ecc_err == OtpNoEccErr) begin
@@ -534,8 +559,13 @@ class otp_ctrl_scoreboard extends cip_base_scoreboard #(
                 // check if write locked
                 if (get_digest_reg_val(part_idx) != 0) begin
                   predict_err(OtpDaiErrIdx, OtpAccessError);
+                end else if (part_idx == Secret2Idx &&
+                             cfg.otp_ctrl_vif.lc_creator_seed_sw_rw_en_i == lc_ctrl_pkg::Off &&
+                             !is_digest(dai_addr)) begin
+                  predict_err(OtpDaiErrIdx, OtpAccessError);
                 end else begin
                   predict_no_err(OtpDaiErrIdx);
+                  dai_wr_ip = 1;
                   // write digest
                   if (is_sw_digest(dai_addr)) begin
                     bit [TL_DW*2-1:0] curr_digest, prev_digest;
@@ -610,7 +640,10 @@ class otp_ctrl_scoreboard extends cip_base_scoreboard #(
           if (cfg.otp_ctrl_vif.lc_prog_no_sta_check) status_mask[OtpLciErrIdx] = 1;
 
         end else if (data_phase_read) begin
-          if (item.d_data[OtpDaiIdleIdx]) check_otp_idle(1);
+          if (item.d_data[OtpDaiIdleIdx]) begin
+            check_otp_idle(1);
+            dai_wr_ip = 0;
+          end
 
           // STATUS register check with mask
           if (do_read_check) begin
@@ -690,6 +723,19 @@ class otp_ctrl_scoreboard extends cip_base_scoreboard #(
   endtask
 
   virtual function void reset(string kind = "HARD");
+    // If reset is issued during otp program, backdoor update otp memory write value because scb
+    // did not know how many cells haven been written.
+    if (dai_wr_ip) begin
+      bit [TL_DW-1:0] otp_addr = get_scb_otp_addr();
+      bit [TL_DW-1:0] dai_addr = otp_addr << 2;
+      otp_a[otp_addr] = cfg.mem_bkdr_vif.read32(dai_addr);
+
+      if (is_secret(dai_addr << 2)) begin
+        otp_a[otp_addr+1] = cfg.mem_bkdr_vif.read32(dai_addr+1);
+      end
+      dai_wr_ip = 0;
+    end
+
     super.reset(kind);
     // flush fifos
     otbn_fifo.flush();
@@ -808,6 +854,10 @@ class otp_ctrl_scoreboard extends cip_base_scoreboard #(
 
     if (get_digest_reg_val(part_idx) != 0 ||
         part_idx inside {CreatorSwCfgIdx, OwnerSwCfgIdx, LifeCycleIdx}) begin
+      predict_err(OtpDaiErrIdx, OtpAccessError);
+      return;
+    end else if (part_idx == Secret2Idx &&
+                 cfg.otp_ctrl_vif.lc_creator_seed_sw_rw_en_i == lc_ctrl_pkg::Off) begin
       predict_err(OtpDaiErrIdx, OtpAccessError);
       return;
     end else begin
@@ -1008,12 +1058,12 @@ class otp_ctrl_scoreboard extends cip_base_scoreboard #(
     return digest;
   endfunction
 
-  virtual function bit is_tl_mem_access_allowed(tl_seq_item item);
+  virtual function bit is_tl_mem_access_allowed(tl_seq_item item, string ral_name);
     // If sw partition is read locked, then access policy changes from RO to no access
     uvm_reg_addr_t addr = ral.get_word_aligned_addr(item.a_addr);
     if (`gmv(ral.creator_sw_cfg_read_lock) == 0) begin
-      if (addr inside {[cfg.mem_ranges[0].start_addr :
-                       cfg.mem_ranges[0].start_addr + CreatorSwCfgSize - 1]}) begin
+      if (addr inside {[cfg.mem_ranges[ral_name][0].start_addr :
+                      cfg.mem_ranges[ral_name][0].start_addr + CreatorSwCfgSize - 1]}) begin
         predict_err(OtpCreatorSwCfgErrIdx, OtpAccessError);
         `DV_CHECK_EQ(item.d_data, 0,
                      $sformatf("locked mem read mismatch at TLUL addr %0h in CreatorSwCfg", addr))
@@ -1021,14 +1071,14 @@ class otp_ctrl_scoreboard extends cip_base_scoreboard #(
       end
     end
     if (`gmv(ral.owner_sw_cfg_read_lock) == 0) begin
-      if (addr inside {[cfg.mem_ranges[0].start_addr + OwnerSwCfgOffset :
-              cfg.mem_ranges[0].start_addr + OwnerSwCfgSize + OwnerSwCfgOffset - 1]}) begin
+      if (addr inside {[cfg.mem_ranges[ral_name][0].start_addr + OwnerSwCfgOffset :
+          cfg.mem_ranges[ral_name][0].start_addr + OwnerSwCfgSize + OwnerSwCfgOffset - 1]}) begin
         predict_err(OtpOwnerSwCfgErrIdx, OtpAccessError);
         `DV_CHECK_EQ(item.d_data, 0,
                      $sformatf("locked mem read mismatch at TLUL addr %0h in OwnerSwCfg", addr))
         return 0;
       end
     end
-    return super.is_tl_mem_access_allowed(item);
+    return super.is_tl_mem_access_allowed(item, ral_name);
   endfunction
 endclass

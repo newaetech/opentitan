@@ -58,7 +58,7 @@ class i2c_scoreboard extends cip_base_scoreboard #(
     end
   endtask : run_phase
 
-  virtual task process_tl_access(tl_seq_item item, tl_channels_e channel = DataChannel);
+  virtual task process_tl_access(tl_seq_item item, tl_channels_e channel, string ral_name);
     uvm_reg   csr;
     i2c_item  sb_exp_wr_item;
     i2c_item  sb_exp_rd_item;
@@ -71,7 +71,7 @@ class i2c_scoreboard extends cip_base_scoreboard #(
 
     uvm_reg_addr_t csr_addr = ral.get_word_aligned_addr(item.a_addr);
     // if access was to a valid csr, get the csr handle
-    if (csr_addr inside {cfg.csr_addrs}) begin
+    if (csr_addr inside {cfg.csr_addrs[ral_name]}) begin
       csr = ral.default_map.get_reg_by_offset(csr_addr);
       `DV_CHECK_NE_FATAL(csr, null)
     end else begin

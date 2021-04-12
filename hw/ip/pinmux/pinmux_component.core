@@ -20,7 +20,6 @@ filesets:
       # pinmux_wkup.sv depends on pinmux_reg_pkg.sv
       - "fileset_topgen ? (lowrisc:systems:topgen-reg-only)"
     files:
-      - rtl/padring.sv
       - rtl/pinmux_pkg.sv
       - rtl/pinmux_wkup.sv
       - rtl/pinmux_jtag_buf.sv
