@@ -1708,6 +1708,10 @@ p256_verify:
  * clobbered registers: x2, x3, x16, x17, x21, x22, w0 to w25
  * clobbered flag groups: FG0
  */
+
+.section .text.start
+.globl wrap_p256
+
 p256_scalar_mult:
 
   /* init all-zero register */
@@ -1749,7 +1753,8 @@ p256_scalar_mult:
   bn.sid    x2++, 0(x21)
   bn.sid    x2, 0(x22)
 
-  ret
+  ecall
+  /* ret */
 
 .section .data
 

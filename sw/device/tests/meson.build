@@ -172,6 +172,7 @@ otbn_smoketest_lib = declare_dependency(
       top_earlgrey,
       sw_otbn['barrett384']['rv32embed_dependency'],
       sw_otbn['err_test']['rv32embed_dependency'],
+      sw_otbn['p256']['rv32embed_dependency'],
     ],
   ),
 )

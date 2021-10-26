@@ -22,6 +22,92 @@ static const otbn_app_t kAppErrTest = OTBN_APP_T_INIT(err_test);
 
 const test_config_t kTestConfig;
 
+#define kP256ScalarNumWords 8
+
+#define ASSERT(a) while(!(a))
+
+OTBN_DECLARE_APP_SYMBOLS(p256);       // The OTBN ECDSA/P-256 app.
+OTBN_DECLARE_PTR_SYMBOL(p256, k);     // k
+OTBN_DECLARE_PTR_SYMBOL(p256, rnd);     // random
+OTBN_DECLARE_PTR_SYMBOL(p256, x);     // The public key x-coordinate.
+OTBN_DECLARE_PTR_SYMBOL(p256, y);     // The public key y-coordinate.
+OTBN_DECLARE_PTR_SYMBOL(p256, d);     // The private key
+
+/* Declare symbols for DMEM pointers */
+OTBN_DECLARE_PTR_SYMBOL(p256, dptr_k);
+OTBN_DECLARE_PTR_SYMBOL(p256, dptr_x);
+OTBN_DECLARE_PTR_SYMBOL(p256, dptr_y);
+OTBN_DECLARE_PTR_SYMBOL(p256, dptr_d);
+OTBN_DECLARE_PTR_SYMBOL(p256, dptr_rnd);
+
+static const otbn_app_t kOtbnAppP256ScalarMult = OTBN_APP_T_INIT(p256);
+
+//static const otbn_ptr_t kOtbnVarP256Rnd = OTBN_PTR_T_INIT(p256, rnd);
+//static const otbn_ptr_t kOtbnVarP256K =   OTBN_PTR_T_INIT(p256, k);
+//static const otbn_ptr_t kOtbnVarP256X =   OTBN_PTR_T_INIT(p256, x);
+//static const otbn_ptr_t kOtbnVarP256Y =   OTBN_PTR_T_INIT(p256, y);
+
+static const otbn_ptr_t kOtbnVarP256DptrK = OTBN_PTR_T_INIT(p256, dptr_k);
+//static const otbn_ptr_t kOtbnVarP256DptrRnd =   OTBN_PTR_T_INIT(p256, dptr_rnd);
+static const otbn_ptr_t kOtbnVarP256DptrX =   OTBN_PTR_T_INIT(p256, dptr_x);
+static const otbn_ptr_t kOtbnVarP256DptrY =   OTBN_PTR_T_INIT(p256, dptr_y);
+static const otbn_ptr_t kOtbnVarP256DptrD =   OTBN_PTR_T_INIT(p256, dptr_d);
+
+
+// TODO: This implementation waits while OTBN is processing; it should be
+// modified to be non-blocking.
+otbn_result_t ecdsa_p256_mult(const uint32_t x[],
+                            const uint32_t y[],
+                            const uint32_t k[],
+                            const uint32_t d[],
+                            uint32_t *result) {
+  otbn_t otbn;
+  LOG_INFO("otbn_init");
+  ASSERT(otbn_init(&otbn, mmio_region_from_addr(
+                                 TOP_EARLGREY_OTBN_BASE_ADDR)) == kOtbnOk);
+                                
+  //uint32_t rnd[kP256ScalarNumWords] = {};
+  size_t dmem_size_words =
+      dif_otbn_get_dmem_size_bytes(&otbn.dif) / sizeof(uint32_t);
+  LOG_INFO("%d", dmem_size_words);
+  const uint32_t zero = 0;
+  dif_otbn_dmem_write(&otbn.dif, sizeof(uint32_t), &zero,
+                            sizeof(zero));
+  // Load the ECDSA/P-256 app and set up data pointers
+  LOG_INFO("otbn_zero");
+  ASSERT(otbn_zero_data_memory(&otbn) == kOtbnOk);
+
+  LOG_INFO("otbn_load");
+  ASSERT(otbn_load_app(&otbn, kOtbnAppP256ScalarMult) == kOtbnOk);
+
+  LOG_INFO("otbn copy");
+  // Set the private key.*
+  ASSERT(otbn_copy_data_to_otbn(&otbn, kP256ScalarNumWords,
+                                         k, kOtbnVarP256DptrK) == kOtbnOk);
+  ASSERT(otbn_copy_data_to_otbn(&otbn, kP256ScalarNumWords,
+                                         x, kOtbnVarP256DptrX) == kOtbnOk);
+  ASSERT(otbn_copy_data_to_otbn(&otbn, kP256ScalarNumWords,
+                                         y, kOtbnVarP256DptrY) == kOtbnOk);
+  ASSERT(otbn_copy_data_to_otbn(&otbn, kP256ScalarNumWords,
+                                         d, kOtbnVarP256DptrD) == kOtbnOk);
+  // Start the OTBN routine. == kOtbnOk)
+  LOG_INFO("otbn execute");
+  ASSERT(otbn_execute(&otbn) == kOtbnOk);
+
+  LOG_INFO("otbn wait");
+  // Spin here waiting for OTBN to complete.
+  ASSERT(otbn_busy_wait_for_done(&otbn) == kOtbnOk);
+
+  LOG_INFO("done!");
+  // Read signature R out of OTBN dmem.
+  //RETURN_IF_ERROR(otbn_copy_data_from_otbn(&otbn, kP256ScalarNumWords,
+  //                                         kOtbnVarEcdsaR, result->R));
+
+  return kOtbnOk;
+}
+
+
+
 /**
  * Get OTBN error bits, check this succeeds and code matches `expected_err_bits`
  */
@@ -87,6 +173,7 @@ static void test_barrett384(otbn_t *otbn_ctx) {
 
   // c, result, max. length 384 bit.
   uint8_t c[kDataSizeBytes] = {0};
+  
 
   // c = (a * b) % m = (10 * 20) % m = 200
   static const uint8_t c_expected[kDataSizeBytes] = {200};
@@ -154,6 +241,34 @@ bool test_main() {
 
   test_barrett384(&otbn_ctx);
   test_err_test(&otbn_ctx);
+
+ // Message
+  uint8_t kIn[32] = {"Hello OTBN."};
+
+  // Public key x-coordinate (Q.x)
+  uint8_t kPublicKeyQx[32] = {
+      0x4e, 0xb2, 0x8b, 0x55, 0xeb, 0x88, 0x62, 0x24, 0xf2, 0xbf, 0x1b,
+      0x9e, 0xd8, 0x4a, 0x09, 0xa7, 0x86, 0x67, 0x92, 0xcd, 0xca, 0x07,
+      0x5d, 0x07, 0x82, 0xe7, 0x2d, 0xac, 0x31, 0x14, 0x79, 0x1f};
+
+  // Public key y-coordinate (Q.y)
+  uint8_t kPublicKeyQy[32] = {
+      0x27, 0x9c, 0xe4, 0x23, 0x24, 0x10, 0xa2, 0xfa, 0xbd, 0x53, 0x73,
+      0xf1, 0xa5, 0x08, 0xf0, 0x40, 0x9e, 0xc0, 0x55, 0x21, 0xa4, 0xf0,
+      0x54, 0x59, 0x00, 0x3e, 0x5f, 0x15, 0x3c, 0xc6, 0x4b, 0x87};
+
+
+  // Private key (d)
+  static const uint8_t kPrivateKeyD[32] = {
+      0xcd, 0xb4, 0x57, 0xaf, 0x1c, 0x9f, 0x4c, 0x74, 0x02, 0x0c, 0x7e,
+      0x8b, 0xe9, 0x93, 0x3e, 0x28, 0x0c, 0xf0, 0x18, 0x0d, 0xf4, 0x6c,
+      0x0b, 0xda, 0x7a, 0xbb, 0xe6, 0x8f, 0xb7, 0xa0, 0x45, 0x55};
+
+  uint8_t out[32];
+
+
+  LOG_INFO("Running p256 test");
+  ecdsa_p256_mult((uint32_t *)kPublicKeyQx, (uint32_t *)kPublicKeyQy, (uint32_t *)kIn, (uint32_t *)kPrivateKeyD, (uint32_t *)out);
 
   return true;
 }
