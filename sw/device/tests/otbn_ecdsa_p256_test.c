@@ -254,7 +254,11 @@ static void p256_ecdsa_point_mul(otbn_t *otbn_ctx,
 
   // Call OTBN to perform operation, and wait for it to complete.
   CHECK(otbn_execute(otbn_ctx) == kOtbnOk);
-  CHECK(otbn_busy_wait_for_done(otbn_ctx) == kOtbnOk);
+  otbn_busy_wait_for_done(otbn_ctx); // == kOtbnOk);
+
+  dif_otbn_err_bits_t err_bits;
+  dif_otbn_get_err_bits(&otbn_ctx->dif, &err_bits);
+  LOG_INFO("ERROR BITS %x", err_bits);
 }
 
 /**
