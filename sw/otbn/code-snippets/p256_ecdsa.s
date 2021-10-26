@@ -21,6 +21,9 @@ start:
   li    x3, 2
   beq   x2, x3, p256_ecdsa_verify
 
+  li    x3, 3
+  beq   x2, x3, p256_point_mul
+
   /* Mode is neither 1 (= sign) nor 2 (= verify). Fail. */
   unimp
 
@@ -32,6 +35,14 @@ p256_ecdsa_sign:
 
 p256_ecdsa_verify:
   jal      x1, p256_verify
+  ecall
+
+p256_point_mul:
+  /* Point dptr_k to k. */
+  la        x11, dptr_k
+  sw        x10, 0(x11)
+  
+  jal      x1, p256_scalar_mult
   ecall
 
 /**

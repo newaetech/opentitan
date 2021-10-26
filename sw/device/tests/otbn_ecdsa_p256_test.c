@@ -234,6 +234,29 @@ static void p256_ecdsa_verify(otbn_t *otbn_ctx, const uint8_t *msg,
                                  signature_x_r) == kOtbnOk);
 }
 
+
+static void p256_ecdsa_point_mul(otbn_t *otbn_ctx,
+                            const uint8_t *public_key_x,
+                            const uint8_t *public_key_y) {
+  CHECK(otbn_ctx != NULL);
+
+  // Set pointers to input arguments.
+  setup_data_pointers(otbn_ctx);
+
+  // Write input arguments.
+  uint32_t mode = 3;  // mode 1 => sign
+  CHECK(otbn_copy_data_to_otbn(otbn_ctx, sizeof(mode), &mode, kOtbnVarMode) ==
+        kOtbnOk);
+  CHECK(otbn_copy_data_to_otbn(otbn_ctx, /*len_bytes=*/32, public_key_x,
+                               kOtbnVarX) == kOtbnOk);
+  CHECK(otbn_copy_data_to_otbn(otbn_ctx, /*len_bytes=*/32, public_key_y,
+                               kOtbnVarY) == kOtbnOk);
+
+  // Call OTBN to perform operation, and wait for it to complete.
+  CHECK(otbn_execute(otbn_ctx) == kOtbnOk);
+  CHECK(otbn_busy_wait_for_done(otbn_ctx) == kOtbnOk);
+}
+
 /**
  * Performs a ECDSA roundtrip test using the NIST P-256 curve.
  *
@@ -298,6 +321,13 @@ static void test_ecdsa_p256_roundtrip(void) {
   profile_end(t_start_verify, "Verify");
 
   // Clear OTBN memory
+  LOG_INFO("Clearing OTBN memory and reloading app");
+  CHECK(otbn_zero_data_memory(&otbn_ctx) == kOtbnOk);
+  CHECK(otbn_load_app(&otbn_ctx, kOtbnAppP256Ecdsa) == kOtbnOk);
+
+
+  p256_ecdsa_point_mul(&otbn_ctx, kPublicKeyQx, kPublicKeyQy);
+
   LOG_INFO("Clearing OTBN memory");
   CHECK(otbn_zero_data_memory(&otbn_ctx) == kOtbnOk);
 }

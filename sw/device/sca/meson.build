@@ -43,6 +43,9 @@ ecc_serial = declare_dependency(
     'ecc_serial.c',
   ],
   dependencies: [
+      sw_lib_testing_entropy_testutils,
+      sw_lib_testing_test_status,
+      sw_lib_dif_otbn,
       sw_lib_runtime_otbn,
       top_earlgrey,
       sw_otbn['p256']['rv32embed_dependency']

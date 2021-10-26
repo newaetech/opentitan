@@ -85,7 +85,6 @@ otbn_result_t ecdsa_p256_mult(const uint32_t x[],
   return kOtbnOk;
 }
 
-
 /**
  * Main function.
  *
@@ -94,6 +93,8 @@ otbn_result_t ecdsa_p256_mult(const uint32_t x[],
  */
 int main(void) {
   const dif_uart_t *uart1;
+
+  entropy_testutils_boot_mode_init();
 
   sca_init(kScaTriggerSourceKmac, kScaPeripheralKmac);
 

@@ -1709,9 +1709,6 @@ p256_verify:
  * clobbered flag groups: FG0
  */
 
-.section .text.start
-.globl wrap_p256
-
 p256_scalar_mult:
 
   /* init all-zero register */
@@ -1724,11 +1721,12 @@ p256_scalar_mult:
   /* load dmem pointer to random number for blinding rnd in dmem:
      x17 <= dptr_rnd = dmem[4] */
   la        x17, dptr_rnd
-  lw        x17, 0(x17)
+  lw        x17, 0(x17) 
 
   /* set dmem pointer to point x-coordinate */
   la        x21, dptr_x
   lw        x21, 0(x21)
+
 
   /* set dmem pointer to point y-coordinate */
   la        x22, dptr_y
@@ -1753,8 +1751,7 @@ p256_scalar_mult:
   bn.sid    x2++, 0(x21)
   bn.sid    x2, 0(x22)
 
-  ecall
-  /* ret */
+  ret
 
 .section .data
 
