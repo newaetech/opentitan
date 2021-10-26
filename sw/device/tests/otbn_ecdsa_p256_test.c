@@ -41,6 +41,7 @@ OTBN_DECLARE_PTR_SYMBOL(p256_ecdsa, dptr_x);
 OTBN_DECLARE_PTR_SYMBOL(p256_ecdsa, dptr_y);
 OTBN_DECLARE_PTR_SYMBOL(p256_ecdsa, dptr_d);
 OTBN_DECLARE_PTR_SYMBOL(p256_ecdsa, dptr_x_r);
+OTBN_DECLARE_PTR_SYMBOL(p256_ecdsa, dptr_k);
 
 OTBN_DECLARE_PTR_SYMBOL(p256_ecdsa, mode);
 OTBN_DECLARE_PTR_SYMBOL(p256_ecdsa, msg);
@@ -49,6 +50,7 @@ OTBN_DECLARE_PTR_SYMBOL(p256_ecdsa, s);
 OTBN_DECLARE_PTR_SYMBOL(p256_ecdsa, x);
 OTBN_DECLARE_PTR_SYMBOL(p256_ecdsa, y);
 OTBN_DECLARE_PTR_SYMBOL(p256_ecdsa, d);
+OTBN_DECLARE_PTR_SYMBOL(p256_ecdsa, k);
 OTBN_DECLARE_PTR_SYMBOL(p256_ecdsa, x_r);
 
 static const otbn_app_t kOtbnAppP256Ecdsa = OTBN_APP_T_INIT(p256_ecdsa);
@@ -60,6 +62,7 @@ static const otbn_ptr_t kOtbnVarDptrX = OTBN_PTR_T_INIT(p256_ecdsa, dptr_x);
 static const otbn_ptr_t kOtbnVarDptrY = OTBN_PTR_T_INIT(p256_ecdsa, dptr_y);
 static const otbn_ptr_t kOtbnVarDptrD = OTBN_PTR_T_INIT(p256_ecdsa, dptr_d);
 static const otbn_ptr_t kOtbnVarDptrXR = OTBN_PTR_T_INIT(p256_ecdsa, dptr_x_r);
+static const otbn_ptr_t kOtbnVarDptrK = OTBN_PTR_T_INIT(p256_ecdsa, dptr_k);
 
 static const otbn_ptr_t kOtbnVarMode = OTBN_PTR_T_INIT(p256_ecdsa, mode);
 static const otbn_ptr_t kOtbnVarMsg = OTBN_PTR_T_INIT(p256_ecdsa, msg);
@@ -69,6 +72,8 @@ static const otbn_ptr_t kOtbnVarX = OTBN_PTR_T_INIT(p256_ecdsa, x);
 static const otbn_ptr_t kOtbnVarY = OTBN_PTR_T_INIT(p256_ecdsa, y);
 static const otbn_ptr_t kOtbnVarD = OTBN_PTR_T_INIT(p256_ecdsa, d);
 static const otbn_ptr_t kOtbnVarXR = OTBN_PTR_T_INIT(p256_ecdsa, x_r);
+static const otbn_ptr_t kOtbnVarK = OTBN_PTR_T_INIT(p256_ecdsa, k);
+
 
 const test_config_t kTestConfig;
 
@@ -146,6 +151,7 @@ static void setup_data_pointers(otbn_t *otbn_ctx) {
   setup_data_pointer(otbn_ctx, kOtbnVarDptrY, kOtbnVarY);
   setup_data_pointer(otbn_ctx, kOtbnVarDptrD, kOtbnVarD);
   setup_data_pointer(otbn_ctx, kOtbnVarDptrXR, kOtbnVarXR);
+  setup_data_pointer(otbn_ctx, kOtbnVarDptrK, kOtbnVarK);
 }
 
 /**
@@ -167,6 +173,8 @@ static void p256_ecdsa_sign(otbn_t *otbn_ctx, const uint8_t *msg,
   // Set pointers to input arguments.
   setup_data_pointers(otbn_ctx);
 
+  char random_k[32] = {0x14, 0};
+
   // Write input arguments.
   uint32_t mode = 1;  // mode 1 => sign
   CHECK(otbn_copy_data_to_otbn(otbn_ctx, sizeof(mode), &mode, kOtbnVarMode) ==
@@ -175,6 +183,9 @@ static void p256_ecdsa_sign(otbn_t *otbn_ctx, const uint8_t *msg,
         kOtbnOk);
   CHECK(otbn_copy_data_to_otbn(otbn_ctx, /*len_bytes=*/32, private_key_d,
                                kOtbnVarD) == kOtbnOk);
+
+  CHECK(otbn_copy_data_to_otbn(otbn_ctx, /*len_bytes=*/32, random_k,
+                               kOtbnVarK) == kOtbnOk);
 
   // Call OTBN to perform operation, and wait for it to complete.
   CHECK(otbn_execute(otbn_ctx) == kOtbnOk);
@@ -185,6 +196,8 @@ static void p256_ecdsa_sign(otbn_t *otbn_ctx, const uint8_t *msg,
                                  signature_r) == kOtbnOk);
   CHECK(otbn_copy_data_from_otbn(otbn_ctx, /*len_bytes=*/32, kOtbnVarS,
                                  signature_s) == kOtbnOk);
+  LOG_INFO("%x", signature_r[0]);
+  LOG_INFO("%x", signature_s[0]);
 }
 
 /**
@@ -234,7 +247,6 @@ static void p256_ecdsa_verify(otbn_t *otbn_ctx, const uint8_t *msg,
                                  signature_x_r) == kOtbnOk);
 }
 
-
 static void p256_ecdsa_point_mul(otbn_t *otbn_ctx,
                             const uint8_t *public_key_x,
                             const uint8_t *public_key_y) {
@@ -259,6 +271,19 @@ static void p256_ecdsa_point_mul(otbn_t *otbn_ctx,
   dif_otbn_err_bits_t err_bits;
   dif_otbn_get_err_bits(&otbn_ctx->dif, &err_bits);
   LOG_INFO("ERROR BITS %x", err_bits);
+
+  uint8_t output_x[32];
+  uint8_t output_y[32];
+
+// Read back results.
+  CHECK(otbn_copy_data_from_otbn(otbn_ctx, /*len_bytes=*/32, kOtbnVarX,
+                                 output_x) == kOtbnOk);
+// Read back results.
+  CHECK(otbn_copy_data_from_otbn(otbn_ctx, /*len_bytes=*/32, kOtbnVarY,
+                                 output_y) == kOtbnOk);
+
+  LOG_INFO("%x", output_x[0]);
+
 }
 
 /**
@@ -269,7 +294,7 @@ static void p256_ecdsa_point_mul(otbn_t *otbn_ctx,
 static void test_ecdsa_p256_roundtrip(void) {
   // Message
   static const uint8_t kIn[32] = {"Hello OTBN."};
-
+/*
   // Public key x-coordinate (Q.x)
   static const uint8_t kPublicKeyQx[32] = {
       0x4e, 0xb2, 0x8b, 0x55, 0xeb, 0x88, 0x62, 0x24, 0xf2, 0xbf, 0x1b,
@@ -281,7 +306,7 @@ static void test_ecdsa_p256_roundtrip(void) {
       0x27, 0x9c, 0xe4, 0x23, 0x24, 0x10, 0xa2, 0xfa, 0xbd, 0x53, 0x73,
       0xf1, 0xa5, 0x08, 0xf0, 0x40, 0x9e, 0xc0, 0x55, 0x21, 0xa4, 0xf0,
       0x54, 0x59, 0x00, 0x3e, 0x5f, 0x15, 0x3c, 0xc6, 0x4b, 0x87};
-
+*/
   // Private key (d)
   static const uint8_t kPrivateKeyD[32] = {
       0xcd, 0xb4, 0x57, 0xaf, 0x1c, 0x9f, 0x4c, 0x74, 0x02, 0x0c, 0x7e,
@@ -304,7 +329,7 @@ static void test_ecdsa_p256_roundtrip(void) {
   uint64_t t_start_sign = profile_start();
   p256_ecdsa_sign(&otbn_ctx, kIn, kPrivateKeyD, signature_r, signature_s);
   profile_end(t_start_sign, "Sign");
-
+/*
   // Clear OTBN memory and reload app
   LOG_INFO("Clearing OTBN memory and reloading app");
   CHECK(otbn_zero_data_memory(&otbn_ctx) == kOtbnOk);
@@ -330,8 +355,9 @@ static void test_ecdsa_p256_roundtrip(void) {
   CHECK(otbn_load_app(&otbn_ctx, kOtbnAppP256Ecdsa) == kOtbnOk);
 
 
+  LOG_INFO("Running point mul");
   p256_ecdsa_point_mul(&otbn_ctx, kPublicKeyQx, kPublicKeyQy);
-
+*/
   LOG_INFO("Clearing OTBN memory");
   CHECK(otbn_zero_data_memory(&otbn_ctx) == kOtbnOk);
 }

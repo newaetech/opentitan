@@ -944,7 +944,7 @@ proj_double:
  * clobbered registers: x2, x3, x10, w0 to w26
  * clobbered flag groups: FG0
  */
-scalar_mult_int:
+scalar_mult_int:  
 
   /* load order of base point G of P-256
      w29 <= n = dmem[p256_n] */
@@ -1161,7 +1161,7 @@ p256_sign:
   bn.lid    x2, 0(x17)
 
   /* scalar multiplication with base point
-     (x_1, y_1) = (w11, w12) <= d*G = w0*(dmem[dptr_x], dmem[dptr_y]) */
+     (x_1, y_1) = (w11, w12) <= k*G = w0*(dmem[dptr_x], dmem[dptr_y]) */
   la        x21, p256_gx
   la        x22, p256_gy
   jal       x1, scalar_mult_int
@@ -1727,12 +1727,11 @@ p256_scalar_mult:
   la        x21, dptr_x
   lw        x21, 0(x21)
 
-
   /* set dmem pointer to point y-coordinate */
   la        x22, dptr_y
   lw        x22, 0(x22)
 
-  /* load private key d from dmem: w0 = dmem[dptr_d] */
+  /* load private key k from dmem: w0 = dmem[dptr_k] */
   li        x2, 0
   bn.lid    x2, 0(x16)
 
