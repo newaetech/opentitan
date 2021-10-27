@@ -18,6 +18,7 @@
 
 
 #define ASSERT(a) while(!(a))
+// #define ASSERT(a) a
 
 
 OTBN_DECLARE_APP_SYMBOLS(p256);       // The OTBN ECDSA/P-256 app.
@@ -50,12 +51,14 @@ otbn_result_t ecdsa_p256_mult(const uint32_t x[],
                             const uint32_t k[],
                             uint32_t *result) {
   otbn_t otbn;
+  int rtn;
   LOG_INFO("otbn_init");
   ASSERT(otbn_init(&otbn, mmio_region_from_addr(
                                  TOP_EARLGREY_OTBN_BASE_ADDR)) == kOtbnOk);
   LOG_INFO("otbn_zero");    
-  ASSERT(otbn_zero_data_memory(&otbn) == kOtbnOk);
+  rtn = otbn_zero_data_memory(&otbn);
   LOG_INFO("otbn_load");
+  while(rtn == kOtbnOk);
   ASSERT(otbn_load_app(&otbn, kOtbnAppP256ScalarMult) == kOtbnOk);
   //RETURN_IF_ERROR(setup_data_pointers(&otbn));
 

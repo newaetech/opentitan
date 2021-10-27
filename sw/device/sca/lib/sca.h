@@ -153,6 +153,7 @@ void sca_call_and_sleep(sca_callee callee, uint32_t sleep_cycles);
  * TODO: Remove once there is a CHECK_DIF_OK version that does not require test
  * library dependencies.
  */
+#ifndef CHECK_DIF_OK
 #define CHECK_DIF_OK(dif_call, ...)                       \
   do {                                                    \
     if (dif_call != kDifOk) {                             \
@@ -167,4 +168,8 @@ void sca_call_and_sleep(sca_callee callee, uint32_t sleep_cycles);
       }                                                   \
     }                                                     \
   } while (false)
+#endif
+
+void sca_putch(unsigned char c);
+unsigned char sca_getch(void);
 #endif  // OPENTITAN_SW_DEVICE_SCA_LIB_SCA_H_

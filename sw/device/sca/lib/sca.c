@@ -230,3 +230,16 @@ void sca_call_and_sleep(sca_callee callee, uint32_t sleep_cycles) {
 
   wait_for_interrupt();
 }
+
+
+void sca_putch(unsigned char c)
+{
+  IGNORE_RESULT(dif_uart_byte_send_polled(&uart1, c));
+}
+
+unsigned char sca_getch(void)
+{
+  unsigned char c;
+  IGNORE_RESULT(dif_uart_byte_receive_polled(&uart1, &c));
+  return c;
+}
