@@ -173,16 +173,18 @@ static void setup_data_pointers(otbn_t *otbn_ctx) {
  */
 static void p256_ecdsa_sign(otbn_t *otbn_ctx, const uint8_t *msg,
                             const uint8_t *private_key_d, uint8_t *signature_r,
-                            uint8_t *signature_s) {
+                            uint8_t *signature_s, const uint8_t *k) {
   CHECK(otbn_ctx != NULL);
 
   // Set pointers to input arguments.
+  LOG_INFO("Setup data pointers");
   setup_data_pointers(otbn_ctx);
 
-  char random_k[32] = {0x14, 0};
+  // char random_k[32] = {0x14, 0};
 
   // Write input arguments.
   uint32_t mode = 1;  // mode 1 => sign
+  LOG_INFO("Copy data");
   CHECK(otbn_copy_data_to_otbn(otbn_ctx, sizeof(mode), &mode, kOtbnVarMode) ==
         kOtbnOk);
   CHECK(otbn_copy_data_to_otbn(otbn_ctx, /*len_bytes=*/32, msg, kOtbnVarMsg) ==
@@ -190,14 +192,17 @@ static void p256_ecdsa_sign(otbn_t *otbn_ctx, const uint8_t *msg,
   CHECK(otbn_copy_data_to_otbn(otbn_ctx, /*len_bytes=*/32, private_key_d,
                                kOtbnVarD) == kOtbnOk);
 
-  CHECK(otbn_copy_data_to_otbn(otbn_ctx, /*len_bytes=*/32, random_k,
+  CHECK(otbn_copy_data_to_otbn(otbn_ctx, /*len_bytes=*/32, k,
                                kOtbnVarK) == kOtbnOk);
 
   // Call OTBN to perform operation, and wait for it to complete.
+  LOG_INFO("Execute");
   CHECK(otbn_execute(otbn_ctx) == kOtbnOk);
+  LOG_INFO("Wait for done");
   CHECK(otbn_busy_wait_for_done(otbn_ctx) == kOtbnOk);
 
   // Read back results.
+  LOG_INFO("Get results");
   CHECK(otbn_copy_data_from_otbn(otbn_ctx, /*len_bytes=*/32, kOtbnVarR,
                                  signature_r) == kOtbnOk);
   CHECK(otbn_copy_data_from_otbn(otbn_ctx, /*len_bytes=*/32, kOtbnVarS,
@@ -297,6 +302,11 @@ static void p256_ecdsa_point_mul(otbn_t *otbn_ctx,
  *
  * A roundtrip consists of three steps: Initialize OTBN, sign, and verify.
  */
+  otbn_t otbn_ctx;
+  static const uint8_t kPrivateKeyD[32] = {
+      0xcd, 0xb4, 0x57, 0xaf, 0x1c, 0x9f, 0x4c, 0x74, 0x02, 0x0c, 0x7e,
+      0x8b, 0xe9, 0x93, 0x3e, 0x28, 0x0c, 0xf0, 0x18, 0x0d, 0xf4, 0x6c,
+      0x0b, 0xda, 0x7a, 0xbb, 0xe6, 0x8f, 0xb7, 0xa0, 0x45, 0x55};
 static void test_ecdsa_p256_roundtrip(void) {
   // Message
   static const uint8_t kIn[32] = {"Hello OTBN."};
@@ -314,13 +324,8 @@ static void test_ecdsa_p256_roundtrip(void) {
       0x54, 0x59, 0x00, 0x3e, 0x5f, 0x15, 0x3c, 0xc6, 0x4b, 0x87};
 */
   // Private key (d)
-  static const uint8_t kPrivateKeyD[32] = {
-      0xcd, 0xb4, 0x57, 0xaf, 0x1c, 0x9f, 0x4c, 0x74, 0x02, 0x0c, 0x7e,
-      0x8b, 0xe9, 0x93, 0x3e, 0x28, 0x0c, 0xf0, 0x18, 0x0d, 0xf4, 0x6c,
-      0x0b, 0xda, 0x7a, 0xbb, 0xe6, 0x8f, 0xb7, 0xa0, 0x45, 0x55};
 
   // Initialize
-  otbn_t otbn_ctx;
   uint64_t t_start_init = profile_start();
   CHECK(otbn_init(&otbn_ctx, mmio_region_from_addr(
                                  TOP_EARLGREY_OTBN_BASE_ADDR)) == kOtbnOk);
@@ -333,7 +338,7 @@ static void test_ecdsa_p256_roundtrip(void) {
 
   LOG_INFO("Signing");
   uint64_t t_start_sign = profile_start();
-  p256_ecdsa_sign(&otbn_ctx, kIn, kPrivateKeyD, signature_r, signature_s);
+  p256_ecdsa_sign(&otbn_ctx, kIn, kPrivateKeyD, signature_r, signature_s, kIn);
   profile_end(t_start_sign, "Sign");
 /*
   // Clear OTBN memory and reload app
@@ -368,24 +373,54 @@ static void test_ecdsa_p256_roundtrip(void) {
   CHECK(otbn_zero_data_memory(&otbn_ctx) == kOtbnOk);
 }
 
+static void simpleserial_ecdsa(const uint8_t *data, size_t data_len)
+{
+  static const uint8_t kIn[32] = {"Hello OTBN."};
+    if (data_len != 32) {
+      LOG_INFO("Invalid data length %hu", (uint8_t )data_len);
+      return;
+    }
+  LOG_INFO("SSECDSA starting...");
+  uint64_t t_start_init = profile_start();
+  CHECK(otbn_init(&otbn_ctx, mmio_region_from_addr(
+                                 TOP_EARLGREY_OTBN_BASE_ADDR)) == kOtbnOk);
+  CHECK(otbn_zero_data_memory(&otbn_ctx) == kOtbnOk);
+  CHECK(otbn_load_app(&otbn_ctx, kOtbnAppP256Ecdsa) == kOtbnOk);
+  profile_end(t_start_init, "Initialization");
+
+  // Sign
+  uint8_t signature_r[32] = {0};
+  uint8_t signature_s[32] = {0};
+
+  LOG_INFO("Signing");
+  uint64_t t_start_sign = profile_start();
+  p256_ecdsa_sign(&otbn_ctx, kIn, kPrivateKeyD, signature_r, signature_s, data);
+  profile_end(t_start_sign, "Sign");
+  LOG_INFO("Clearing OTBN memory");
+  CHECK(otbn_zero_data_memory(&otbn_ctx) == kOtbnOk);
+
+}
+
+const dif_uart_t *uart1;
 static void try_serial(void) {
-      const dif_uart_t *uart1;
-      sca_init(kScaTriggerSourceKmac, kScaPeripheralKmac);
-      sca_get_uart(&uart1);
-      // simple_serial_init(uart1);
-      simpleserial_init();
+      simple_serial_result_t err;
+      if (err = simple_serial_register_handler('p', simpleserial_ecdsa), err != kSimpleSerialOk) {
+          LOG_INFO("Register handler failed with return %hu", (short unsigned int)err);
+      }
   LOG_INFO("Starting simple serial packet handling.");
       // uint8_t x = 0;
   while (true) {
-    // simple_serial_process_packet();
-    simpleserial_get();
+    simple_serial_process_packet();
   }
 }
 
 bool test_main() {
   entropy_testutils_boot_mode_init();
+      sca_init(kScaTriggerSourceOtbn, kScaPeripheralOtbn | kScaPeripheralCsrng | kScaPeripheralEdn);
+      sca_get_uart(&uart1);
+      simple_serial_init(uart1);
 
-  test_ecdsa_p256_roundtrip();
+  // test_ecdsa_p256_roundtrip();
 
   try_serial();
 
