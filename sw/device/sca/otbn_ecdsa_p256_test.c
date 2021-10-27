@@ -340,35 +340,6 @@ static void test_ecdsa_p256_roundtrip(void) {
   uint64_t t_start_sign = profile_start();
   p256_ecdsa_sign(&otbn_ctx, kIn, kPrivateKeyD, signature_r, signature_s, kIn);
   profile_end(t_start_sign, "Sign");
-/*
-  // Clear OTBN memory and reload app
-  LOG_INFO("Clearing OTBN memory and reloading app");
-  CHECK(otbn_zero_data_memory(&otbn_ctx) == kOtbnOk);
-  CHECK(otbn_load_app(&otbn_ctx, kOtbnAppP256Ecdsa) == kOtbnOk);
-
-  // Verify
-  uint8_t signature_x_r[32] = {0};
-
-  LOG_INFO("Verifying");
-  uint64_t t_start_verify = profile_start();
-  p256_ecdsa_verify(&otbn_ctx, kIn, signature_r, signature_s, kPublicKeyQx,
-                    kPublicKeyQy, signature_x_r);
-
-  // Include the r =? x_r comparison in the profiling as this is something
-  // either OTBN or the host CPU needs to do as part of the signature
-  // verification.
-  check_data("signature_x_r", signature_r, signature_x_r, 32);
-  profile_end(t_start_verify, "Verify");
-
-  // Clear OTBN memory
-  LOG_INFO("Clearing OTBN memory and reloading app");
-  CHECK(otbn_zero_data_memory(&otbn_ctx) == kOtbnOk);
-  CHECK(otbn_load_app(&otbn_ctx, kOtbnAppP256Ecdsa) == kOtbnOk);
-
-
-  LOG_INFO("Running point mul");
-  p256_ecdsa_point_mul(&otbn_ctx, kPublicKeyQx, kPublicKeyQy);
-*/
   LOG_INFO("Clearing OTBN memory");
   CHECK(otbn_zero_data_memory(&otbn_ctx) == kOtbnOk);
 }

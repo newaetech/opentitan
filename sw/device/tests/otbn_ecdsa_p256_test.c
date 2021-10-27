@@ -11,6 +11,9 @@
 #include "sw/device/lib/testing/test_framework/test_main.h"
 
 #include "hw/top_earlgrey/sw/autogen/top_earlgrey.h"
+#include "sw/device/sca/lib/sca.h"
+#include "sw/device/sca/lib/simple_serial.h"
+#include "sw/device/sca/lib/prng.h"
 
 /**
  * ECDSA sign and verify test with the NIST P-256 curve using OTBN.
@@ -362,10 +365,27 @@ static void test_ecdsa_p256_roundtrip(void) {
   CHECK(otbn_zero_data_memory(&otbn_ctx) == kOtbnOk);
 }
 
+static void try_serial(void) {
+      const dif_uart_t *uart1;
+      sca_init(kScaTriggerSourceKmac, kScaPeripheralKmac);
+      sca_get_uart(&uart1);
+      simple_serial_init(uart1);
+  LOG_INFO("Starting simple serial packet handling.");
+      uint8_t x = 'f';
+      while(true){
+      simple_serial_send_packet('z', &x, 1);
+      }
+//   while (true) {
+//     simple_serial_process_packet();
+//   }
+}
+
 bool test_main() {
   entropy_testutils_boot_mode_init();
 
   test_ecdsa_p256_roundtrip();
+
+  try_serial();
 
   return true;
 }

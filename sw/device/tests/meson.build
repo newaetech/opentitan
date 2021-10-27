@@ -2,6 +2,8 @@
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
 
+subdir('lib')
+
 # All tests added to this dictionary will result in build targets that have
 # names starting `sw/device/tests/<test_name>`. They will not contain the
 # subdirectory name, because the build targets are really declared at the bottom
@@ -584,6 +586,10 @@ foreach sw_test_name, sw_test_info : sw_tests
         sw_test_info['library'],
         sw_lib_irq_handlers,
         sw_lib_testing_test_main,
+        sw_sca_lib_prng,
+        sw_sca_lib_sca,
+        sw_sca_lib_simple_serial,
+
       ],
     )
 
