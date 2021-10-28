@@ -364,9 +364,9 @@ static void simpleserial_ecdsa(const uint8_t *data, size_t data_len)
   uint8_t signature_s[32] = {0};
 
   LOG_INFO("Signing");
-  uint64_t t_start_sign = profile_start();
+  // sca_set_trigger_high();
   p256_ecdsa_sign(&otbn_ctx, kIn, kPrivateKeyD, signature_r, signature_s, data);
-  profile_end(t_start_sign, "Sign");
+  // sca_set_trigger_low();
   LOG_INFO("Clearing OTBN memory");
   CHECK(otbn_zero_data_memory(&otbn_ctx) == kOtbnOk);
 
@@ -392,6 +392,7 @@ bool test_main() {
       simple_serial_init(uart1);
 
   // test_ecdsa_p256_roundtrip();
+  sca_set_trigger_low();
 
   try_serial();
 
