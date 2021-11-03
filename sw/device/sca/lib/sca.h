@@ -167,4 +167,30 @@ void sca_call_and_sleep(sca_callee callee, uint32_t sleep_cycles);
       }                                                   \
     }                                                     \
   } while (false)
+
+/**
+ * Checks that the given condition is true. If the condition is false, this
+ * function logs and then aborts.
+ *
+ * @param condition an expression to check.
+ * @param ... arguments to a LOG_* macro, which are evaluated if the check
+ * fails.
+* TODO: Remove once there is a CHECK version that does not require test
+ * library dependencies.
+ */
+#define CHECK(condition, ...)                             \
+  do {                                                    \
+    if (!(condition)) {                                   \
+      /* NOTE: because the condition in this if           \
+         statement can be statically determined,          \
+         only one of the below string constants           \
+         will be included in the final binary.*/          \
+      if (GET_NUM_VARIABLE_ARGS(_, ##__VA_ARGS__) == 0) { \
+        LOG_ERROR("CHECK-fail: " #condition);             \
+      } else {                                            \
+        LOG_ERROR("CHECK-fail: " __VA_ARGS__);            \
+      }                                                   \
+    }                                                     \
+  } while (false)
+
 #endif  // OPENTITAN_SW_DEVICE_SCA_LIB_SCA_H_

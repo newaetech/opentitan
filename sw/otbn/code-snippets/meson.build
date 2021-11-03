@@ -21,6 +21,10 @@ sw_otbn_sources += {
   'err_test': files(
     'err_test.s',
   ),
+  'p256_ecdsa_sca': files(
+    'p256_ecdsa_sca.s',
+    'p256.s',
+  ),
   'randomness': files(
     'randomness.s',
   ),
