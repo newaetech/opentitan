@@ -58,6 +58,26 @@ sca_programs += {
   },
 }
 
+ecc384_serial = declare_dependency(
+  sources: [
+    hw_ip_edn_reg_h,
+    'ecc384_serial.c',
+  ],
+  dependencies: [
+      sw_lib_runtime_otbn,
+      sw_lib_runtime_log,
+      sw_lib_runtime_ibex,
+      sw_lib_dif_csrng,
+      top_earlgrey,
+      sw_otbn['p384_ecdsa_sca']['rv32embed_dependency'],
+  ],
+)
+sca_programs += {
+  'ecc384_serial': {
+    'dependency': ecc384_serial,
+  },
+}
+
 foreach sca_program_name, sca_program_info: sca_programs
   foreach device_name, device_lib : sw_lib_arch_core_devices
     sca_program_elf = executable(

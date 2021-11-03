@@ -25,6 +25,11 @@ sw_otbn_sources += {
     'p256_ecdsa_sca.s',
     'p256.s',
   ),
+  'p384_ecdsa_sca': files(
+    'p384_ecdsa_sca.s',
+    'p384_sign.s',
+    'p384_base.s',
+  ),
   'randomness': files(
     'randomness.s',
   ),
