@@ -17,6 +17,10 @@ sw_otbn_sources += {
     'p256_ecdsa.s',
     'p256.s',
   ),
+    'p256_ecdsa_sca': files(
+    'p256_ecdsa_sca.s',
+    'p256.s',
+  ),
   'p256_ecdsa_sign_test': files(
     'p256_ecdsa_sign_test.s',
     'p256.s',
@@ -42,6 +46,11 @@ sw_otbn_sources += {
   ),
   'p384_base_mult_test': files(
     'p384_base_mult_test.s',
+    'p384_sign.s',
+    'p384_base.s',
+  ),
+  'p384_ecdsa_sca': files(
+    'p384_ecdsa_sca.s',
     'p384_sign.s',
     'p384_base.s',
   ),
