@@ -140,4 +140,7 @@ sw_otbn_sources += {
     'rsa_verify_3072_rr.s',
     '../../vendor/veri-titan/gen/rsa_verify_3072.s',
   ),
+  'sca_instruction': files(
+    'sca_instruction.s',
+  )
 }

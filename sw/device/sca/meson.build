@@ -78,6 +78,27 @@ sca_programs += {
   },
 }
 
+otbn_inst_serial = declare_dependency(
+  sources: [
+    hw_ip_edn_reg_h,
+    'otbn_serial.c',
+  ],
+  dependencies: [
+      sw_lib_runtime_otbn,
+      sw_lib_runtime_log,
+      sw_lib_runtime_ibex,
+      sw_lib_dif_csrng,
+      top_earlgrey,
+      sw_otbn['sca_instruction']['rv32embed_dependency'],
+  ],  
+)
+
+sca_programs += {
+  'otbn_inst_serial': {
+    'dependency': otbn_inst_serial,
+  },
+}
+
 foreach sca_program_name, sca_program_info: sca_programs
   foreach device_name, device_lib : sw_lib_arch_core_devices
     sca_program_elf = executable(
