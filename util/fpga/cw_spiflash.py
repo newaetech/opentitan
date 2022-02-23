@@ -213,14 +213,15 @@ class _Bootstrap:
         self._fpga_io.pin_set_state(self._PIN_MAPPINGS[self._board].PIN_JTAG_SPI, 1)
         time.sleep(self._BOOTSTRAP_DELAY)
 
-    def transfer(self, frame):
+    def transfer(self, frame, verbose=True):
         """Transmits a frame over SPI and receives the acknowledgement for the previous frame."""
         # Wait longer after the first frame since it triggers a flash erase operation.
         if frame.is_second_frame:
             time.sleep(self._SECOND_FRAME_DELAY)
         else:
             time.sleep(self._INTER_FRAME_DELAY)
-        print(f'Transferring {frame}.')
+        if verbose:
+            print(f'Transferring {frame}.')
         # Acknowledgement is the same size as digests.
         return bytes(
             self._fpga_io.spi1_transfer(
@@ -234,7 +235,7 @@ class SPIProgrammer:
         self._firmware_path = firmware_path
         self._board = board
 
-    def run(self, fpga):
+    def run(self, fpga, verbose=True):
         """Programs OpenTitan over the SPI interface of SAM3X/U on CW310/305.
 
         This implementation has two improvements over the `spiflash` tool under
@@ -252,7 +253,8 @@ class SPIProgrammer:
             frame_number = 0
             flash_offset = 0
             prev_frame = None
-            print(f'Programming OpenTitan with "{self._firmware_path}"...')
+            if verbose:
+                print(f'Programming OpenTitan with "{self._firmware_path}"...')
             with open(self._firmware_path, mode='rb') as fw:
                 # Read fixed-size blocks from the firmware image.
                 # Note: The second argument ``b''`` to ``iter`` below is the sentinel value that
@@ -264,7 +266,7 @@ class SPIProgrammer:
                     # proceeding with the next frame.
                     while True:
                         # Transmit frame N, receive acknowledgement for frame N-1.
-                        ack = bootstrap.transfer(frame)
+                        ack = bootstrap.transfer(frame, verbose)
                         if prev_frame and prev_frame.expected_ack != ack:
                             # When OpenTitan encounters a transmission error or an out of
                             # sequence frame, it ignores the current frame and sends the ack of
@@ -274,7 +276,7 @@ class SPIProgrammer:
                             # apart, we should re-transmit the previous frame and check the
                             # ack sent by OpenTitan.
                             print(f'Error transferring {prev_frame}.')
-                            ack = bootstrap.transfer(prev_frame)
+                            ack = bootstrap.transfer(prev_frame, verbose)
                             if ack == frame.expected_ack:
                                 # Ack sent by OpenTitan was corrupted. Proceed with the next frame.
                                 break
@@ -290,4 +292,4 @@ class SPIProgrammer:
                     flash_offset += _SpiFlashFrame.PAYLOAD_SIZE
             # Transmit an all 0xFF frame with the expected frame number to finish bootstrapping.
             bootstrap.transfer(
-                _SpiFlashFrame(frame_number | (1 << 31), flash_offset, b''))
+                _SpiFlashFrame(frame_number | (1 << 31), flash_offset, b''), verbose)
