@@ -14,7 +14,10 @@
 // Based on usb_fs_pe.v from the TinyFPGA-Bootloader project but
 // this version contains no packet buffers
 
+`include "prim_assert.sv"
+
 module usb_fs_nb_pe #(
+  // Currently only accepts NumOutEps == NumInEps
   parameter int unsigned NumOutEps = 2,
   parameter int unsigned NumInEps = 2,
   parameter int unsigned MaxPktSizeByte = 32,
@@ -23,6 +26,8 @@ module usb_fs_nb_pe #(
   input  logic                   clk_48mhz_i,
   input  logic                   rst_ni,        // Async. reset, active low
   input  logic                   link_reset_i,  // USB reset, sync to 48 MHz, active high
+  input  logic                   link_active_i, // Device is in Default/Addressed/Configured state
+                                                // and may respond to transactions
   input  logic [6:0]             dev_addr_i,
 
   input  logic                   cfg_eop_single_bit_i, // 1: detect a single SE0 bit as EOP
@@ -72,6 +77,7 @@ module usb_fs_nb_pe #(
 
   // RX line status
   output logic                   rx_jjj_det_o,
+  output logic                   rx_j_det_o,
 
   // RX errors
   output logic                   rx_crc_err_o,
@@ -94,6 +100,10 @@ module usb_fs_nb_pe #(
 );
 
   import usb_consts_pkg::*;
+
+  // The code below assumes the number of OUT endpoints and IN endpoints are
+  // interchangeable. Require them to be equal.
+  `ASSERT_INIT(NumOutEpsEqualsNumInEps_A, NumOutEps == NumInEps)
 
   // rx interface
   logic bit_strobe;
@@ -128,6 +138,10 @@ module usb_fs_nb_pe #(
   assign frame_index_o = rx_frame_num;
   assign usb_oe_o = usb_oe;
 
+  // IN ep type configuration
+  logic [NumInEps-1:0] in_ep_iso_not_control;
+  assign in_ep_iso_not_control = in_ep_iso_i & ~out_ep_control_i;
+
   usb_fs_nb_in_pe #(
     .NumInEps           (NumInEps),
     .MaxInPktSizeByte   (MaxPktSizeByte)
@@ -135,6 +149,7 @@ module usb_fs_nb_pe #(
     .clk_48mhz_i           (clk_48mhz_i),
     .rst_ni                (rst_ni),
     .link_reset_i          (link_reset_i),
+    .link_active_i         (link_active_i),
     .dev_addr_i            (dev_addr_i),
 
     // endpoint interface
@@ -149,7 +164,7 @@ module usb_fs_nb_pe #(
     .in_ep_has_data_i      (in_ep_has_data_i),
     .in_ep_data_i          (in_ep_data_i),
     .in_ep_data_done_i     (in_ep_data_done_i),
-    .in_ep_iso_i           (in_ep_iso_i),
+    .in_ep_iso_i           (in_ep_iso_not_control),
 
     .data_toggle_clear_i   (data_toggle_clear_i),
 
@@ -177,6 +192,7 @@ module usb_fs_nb_pe #(
     .clk_48mhz_i            (clk_48mhz_i),
     .rst_ni                 (rst_ni),
     .link_reset_i           (link_reset_i),
+    .link_active_i          (link_active_i),
     .dev_addr_i             (dev_addr_i),
 
     // endpoint interface
@@ -233,6 +249,7 @@ module usb_fs_nb_pe #(
     .rx_data_o              (rx_data),
     .valid_packet_o         (rx_pkt_valid),
     .rx_jjj_det_o           (rx_jjj_det_o),
+    .rx_j_det_o             (rx_j_det_o),
     .crc_error_o            (rx_crc_err_o),
     .pid_error_o            (rx_pid_err_o),
     .bitstuff_error_o       (rx_bitstuff_err_o)

@@ -26,6 +26,7 @@ module flash_ctrl
   input        rst_otp_ni,
 
   // life cycle interface
+  // SEC_CM: LC_CTRL.INTERSIG.MUBI
   input lc_ctrl_pkg::lc_tx_t lc_creator_seed_sw_rw_en_i,
   input lc_ctrl_pkg::lc_tx_t lc_owner_seed_sw_rw_en_i,
   input lc_ctrl_pkg::lc_tx_t lc_iso_part_sw_rd_en_i,
@@ -43,6 +44,7 @@ module flash_ctrl
   output       tlul_pkg::tl_d2h_t mem_tl_o,
 
   // otp/lc/pwrmgr/keymgr Interface
+  // SEC_CM: SCRAMBLE.KEY.SIDELOAD
   output       otp_ctrl_pkg::flash_otp_key_req_t otp_o,
   input        otp_ctrl_pkg::flash_otp_key_rsp_t otp_i,
   input        lc_ctrl_pkg::lc_tx_t rma_req_i,
@@ -70,6 +72,10 @@ module flash_ctrl
   input  prim_alert_pkg::alert_rx_t [flash_ctrl_reg_pkg::NumAlerts-1:0] alert_rx_i,
   output prim_alert_pkg::alert_tx_t [flash_ctrl_reg_pkg::NumAlerts-1:0] alert_tx_o,
 
+  // Observability
+  input ast_pkg::ast_obs_ctrl_t obs_ctrl_i,
+  output logic [7:0] fla_obs_o,
+
   // Flash test interface
   input scan_en_i,
   input prim_mubi_pkg::mubi4_t scanmode_i,
@@ -96,6 +102,11 @@ module flash_ctrl
   logic update_err;
   logic storage_err;
 
+  // SEC_CM: BUS.INTEGRITY
+  // SEC_CM: CTRL.CONFIG.REGWEN
+  // SEC_CM: DATA_REGIONS.CONFIG.REGWEN, DATA_REGIONS.CONFIG.SHADOW
+  // SEC_CM: INFO_REGIONS.CONFIG.REGWEN, INFO_REGIONS.CONFIG.SHADOW
+  // SEC_CM: BANK.CONFIG.REGWEN, BANK.CONFIG.SHADOW
   flash_ctrl_core_reg_top u_reg_core (
     .clk_i,
     .rst_ni,
@@ -217,6 +228,7 @@ module flash_ctrl
   flash_lcmgr_phase_e hw_phase;
   logic lcmgr_err;
   logic arb_fsm_err;
+  logic seed_err;
 
   // Flash control arbitration connections to software interface
   logic sw_ctrl_done;
@@ -256,6 +268,8 @@ module flash_ctrl
 
   // life cycle connections
   lc_ctrl_pkg::lc_tx_t lc_seed_hw_rd_en;
+
+  lc_ctrl_pkg::lc_tx_t dis_access;
 
   prim_lc_sync #(
     .NumCopies(1)
@@ -414,7 +428,7 @@ module flash_ctrl
 
     // outgoing seeds
     .seeds_o(keymgr_o.seeds),
-    .seed_err_o(), // TBD hook-up to Err code register
+    .seed_err_o(seed_err),
 
     // phase indication
     .phase_o(hw_phase),
@@ -438,6 +452,9 @@ module flash_ctrl
 
     // error indication
     .fatal_err_o(lcmgr_err),
+
+    // disable access to flash storage after rma process
+    .dis_access_o(dis_access),
 
     // init ongoing
     .init_busy_o(ctrl_init_busy)
@@ -866,7 +883,18 @@ module flash_ctrl
 
   // flash functional disable
   prim_mubi_pkg::mubi4_t flash_disable;
-  assign flash_disable = lc_escalate_en == lc_ctrl_pkg::On ?
+  lc_ctrl_pkg::lc_tx_t lc_disable;
+  assign lc_disable = lc_ctrl_pkg::lc_tx_or(lc_escalate_en, dis_access, lc_ctrl_pkg::On);
+
+  // Normally, faults (those registered in fault_status) should also cause flash access
+  // to disable.  However, most errors encountered by hardware during flash access
+  // are registered as faults (since they functionally never happen).  Out of an abundance
+  // of caution for the first iteration, we will not kill flash access based on those
+  // faults immediately just in case there are unexpected corner conditions.
+  // In other words...cowardice.
+  // SEC_CM: MEM.CTRL.GLOBAL_ESC
+  // SEC_CM: MEM_DISABLE.CONFIG.MUBI
+  assign flash_disable = lc_ctrl_pkg::lc_tx_test_true_loose(lc_disable) ?
                          prim_mubi_pkg::MuBi4True :
                          prim_mubi_pkg::mubi4_t'(reg2hw.dis.q);
 
@@ -875,11 +903,12 @@ module flash_ctrl
   prim_mubi_pkg::mubi4_t sw_flash_exec_en;
   prim_mubi_pkg::mubi4_t flash_exec_en;
 
+  // SEC_CM: MEM_EN.CONFIG.REDUN
   assign sw_flash_exec_en = (reg2hw.exec.q == unsigned'(ExecEn)) ?
                             prim_mubi_pkg::MuBi4True :
                             prim_mubi_pkg::MuBi4False;
 
-  assign flash_exec_en = lc_escalate_en == lc_ctrl_pkg::On ?
+  assign flash_exec_en = lc_ctrl_pkg::lc_tx_test_true_loose(lc_escalate_en) ?
                          prim_mubi_pkg::MuBi4False :
                          sw_flash_exec_en;
 
@@ -917,6 +946,7 @@ module flash_ctrl
   assign hw2reg.fault_status.lcmgr_err.d      = 1'b1;
   assign hw2reg.fault_status.arb_fsm_err.d    = 1'b1;
   assign hw2reg.fault_status.storage_err.d    = 1'b1;
+  assign hw2reg.fault_status.seed_err.d       = 1'b1;
   assign hw2reg.fault_status.mp_err.de        = hw_err.mp_err;
   assign hw2reg.fault_status.rd_err.de        = hw_err.rd_err;
   assign hw2reg.fault_status.prog_win_err.de  = hw_err.prog_win_err;
@@ -927,6 +957,7 @@ module flash_ctrl
   assign hw2reg.fault_status.lcmgr_err.de     = lcmgr_err;
   assign hw2reg.fault_status.arb_fsm_err.de   = arb_fsm_err;
   assign hw2reg.fault_status.storage_err.de   = storage_err;
+  assign hw2reg.fault_status.seed_err.de      = seed_err;
 
   // Correctable ECC count / address
   for (genvar i = 0; i < NumBanks; i++) begin : gen_ecc_single_err_reg
@@ -1135,6 +1166,8 @@ module flash_ctrl
     .flash_ctrl_o      (flash_phy_rsp),
     .tl_i              (prim_tl_i),
     .tl_o              (prim_tl_o),
+    .obs_ctrl_i,
+    .fla_obs_o,
     .lc_nvm_debug_en_i,
     .flash_bist_enable_i,
     .flash_power_down_h_i,
@@ -1182,6 +1215,8 @@ module flash_ctrl
   `ASSERT_PRIM_COUNT_ERROR_TRIGGER_ALERT(PageCntAlertCheck_A, u_flash_hw_if.u_page_cnt,
                                          alert_tx_o[0])
   `ASSERT_PRIM_COUNT_ERROR_TRIGGER_ALERT(WordCntAlertCheck_A, u_flash_hw_if.u_word_cnt,
+                                         alert_tx_o[0])
+  `ASSERT_PRIM_COUNT_ERROR_TRIGGER_ALERT(WipeIdx_A, u_flash_hw_if.u_wipe_idx_cnt,
                                          alert_tx_o[0])
 
   `ASSERT_PRIM_FSM_ERROR_TRIGGER_ALERT(LcCtrlFsmCheck_A,

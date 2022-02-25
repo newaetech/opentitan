@@ -16,21 +16,19 @@ module tb;
 
   wire clk, rst_n, rst_shadowed_n;
   wire devmode;
-  wire idle;
   wire [NUM_MAX_INTERRUPTS-1:0] interrupts;
   // keymgr/kmac sideload wires
   keymgr_pkg::hw_key_req_t kmac_sideload_key;
   // kmac_app interfaces
   kmac_pkg::app_req_t [kmac_pkg::NumAppIntf-1:0] app_req;
   kmac_pkg::app_rsp_t [kmac_pkg::NumAppIntf-1:0] app_rsp;
-  logic en_masking;
 
   // interfaces
   clk_rst_if clk_rst_if(.clk(clk), .rst_n(rst_n));
   rst_shadowed_if rst_shadowed_if(.rst_n(rst_n), .rst_shadowed_n(rst_shadowed_n));
+  kmac_if kmac_if(.clk_i(clk), .rst_ni(rst_n));
 
   pins_if #(1)                   devmode_if(devmode);
-  pins_if #(1)                   idle_if(idle);
   pins_if #(NUM_MAX_INTERRUPTS)  intr_if(interrupts);
 
   tl_if tl_if(.clk(clk), .rst_n(rst_n));
@@ -64,7 +62,7 @@ module tb;
     .alert_tx_o         (alert_tx ),
 
     // life cycle escalation input
-    .lc_escalate_en_i   (lc_ctrl_pkg::Off ),
+    .lc_escalate_en_i   (kmac_if.lc_escalate_en_i ),
 
     // KeyMgr sideload key interface
     .keymgr_key_i       (kmac_sideload_key),
@@ -82,10 +80,10 @@ module tb;
     .intr_kmac_err_o    (interrupts[KmacErr]       ),
 
     // Idle interface
-    .idle_o             (idle),
+    .idle_o             (kmac_if.idle_o ),
 
     // TODO: check this output signal.
-    .en_masking_o       (en_masking),
+    .en_masking_o       (kmac_if.en_masking_o ),
 
     // EDN interface
     .clk_edn_i          (edn_clk                           ),
@@ -97,6 +95,7 @@ module tb;
   for (genvar i = 0; i < kmac_pkg::NumAppIntf; i++) begin : gen_kmac_app_intf
     assign app_req[i]                   = kmac_app_if[i].kmac_data_req;
     assign kmac_app_if[i].kmac_data_rsp = app_rsp[i];
+    assign kmac_if.app_err_o[i] = app_rsp[i].error;
 
     initial begin
       uvm_config_db#(virtual kmac_app_intf)::set(null,
@@ -113,11 +112,29 @@ module tb;
     uvm_config_db#(intr_vif)::set(null, "*.env", "intr_vif", intr_if);
     uvm_config_db#(devmode_vif)::set(null, "*.env", "devmode_vif", devmode_if);
     uvm_config_db#(virtual tl_if)::set(null, "*.env.m_tl_agent*", "vif", tl_if);
-    uvm_config_db#(virtual pins_if#(1))::set(null, "*.env", "idle_vif", idle_if);
     uvm_config_db#(virtual key_sideload_if)::set(null, "*.env.keymgr_sideload_agent*",
                                                  "vif", sideload_if);
+    uvm_config_db#(virtual kmac_if)::set(null, "*.env", "kmac_vif", kmac_if);
+
+    // Random drive lc_escalation signals.
+    $assertoff(0, tb.dut.u_prim_lc_sync.PrimLcSyncCheckTransients_A);
+    $assertoff(0, tb.dut.u_prim_lc_sync.PrimLcSyncCheckTransients0_A);
+    $assertoff(0, tb.dut.u_prim_lc_sync.PrimLcSyncCheckTransients1_A);
+
     $timeformat(-12, 0, " ps", 12);
     run_test();
+  end
+
+  // This assertion only exists when en_masking parameter is set.
+  // This assertion will not be true if Kmac is interrupted by lc_escalate_en signal.
+  if (`EN_MASKING) begin : gen_assert_disable_for_masking_mode
+    initial begin
+      bit disable_lc_asserts;
+      void'($value$plusargs("disable_lc_asserts=%0b", disable_lc_asserts));
+      if (disable_lc_asserts) begin
+        $assertoff(0, tb.dut.u_sha3.u_keccak.u_keccak_p.gen_selperiod_chk.SelStayTwoCycleIfTrue_A);
+      end
+    end
   end
 
 endmodule

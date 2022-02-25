@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
 
-load("//rules:opentitan.bzl", "OPENTITAN_CPU", "opentitan_binary", "opentitan_functest", "verilator_params")
+load("//rules:opentitan.bzl", "OPENTITAN_CPU", "opentitan_functest", "verilator_params")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -37,6 +37,7 @@ cc_library(
     hdrs = ["mock_boot_data.h"],
     deps = [
         ":boot_data_intf",
+        "//sw/device/lib/base/testing:global_mock",
         "//sw/device/silicon_creator/testing:mask_rom_test",
         "@googletest//:gtest",
     ],
@@ -53,6 +54,16 @@ opentitan_functest(
         ":test_main",
         "//hw/top_earlgrey/sw/autogen:top_earlgrey",
         "//sw/device/silicon_creator/lib/drivers:flash_ctrl",
+    ],
+)
+
+cc_library(
+    name = "cfi",
+    hdrs = [
+        "cfi.h",
+    ],
+    deps = [
+        "//sw/device/lib/base",
     ],
 )
 
@@ -85,6 +96,9 @@ cc_test(
         # sources included here because we need MOCK_CSR.
         "epmp.c",
         "epmp.h",
+    ],
+    defines = [
+        "OT_OFF_TARGET_TEST",
     ],
     deps = [
         ":epmp_intf",
@@ -177,6 +191,7 @@ cc_test(
     deps = [
         ":error",
         ":log",
+        "//sw/device/lib/base/testing:global_mock",
         "//sw/device/silicon_creator/lib/drivers:uart",
         "//sw/device/silicon_creator/testing:mask_rom_test",
         "@googletest//:gtest_main",
@@ -184,15 +199,18 @@ cc_test(
 )
 
 cc_library(
+    name = "manifest_size",
+    hdrs = ["manifest_size.h"],
+)
+
+cc_library(
     name = "manifest_intf",
-    hdrs = [
-        "manifest.h",
-        "manifest_size.h",
-    ],
+    hdrs = ["manifest.h"],
     deps = [
         ":epmp_intf",
         ":error",
         ":keymgr_binding",
+        ":manifest_size",
         ":sigverify_internal",
         "//sw/device/lib/base",
         "//sw/device/silicon_creator/lib/drivers:lifecycle",
@@ -214,6 +232,7 @@ cc_library(
     hdrs = ["mock_manifest.h"],
     deps = [
         ":manifest_intf",
+        "//sw/device/lib/base/testing:global_mock",
         "//sw/device/silicon_creator/testing:mask_rom_test",
         "@googletest//:gtest",
     ],
@@ -257,7 +276,6 @@ cc_library(
     deps = [
         ":error",
         "//sw/device/lib/base",
-        "//sw/device/silicon_creator/lib/drivers:lifecycle",
     ],
 )
 
@@ -267,6 +285,7 @@ cc_library(
     hdrs = ["mock_shutdown.h"],
     deps = [
         ":shutdown_intf",
+        "//sw/device/lib/base/testing:global_mock",
         "//sw/device/silicon_creator/testing:mask_rom_test",
         "@googletest//:gtest",
     ],
@@ -277,15 +296,17 @@ cc_library(
     srcs = ["shutdown.c"],
     deps = [
         ":error",
-        ":log",
         ":shutdown_intf",
         "//hw/ip/keymgr/data:keymgr_regs",
         "//hw/ip/lc_ctrl/data:lc_ctrl_regs",
         "//hw/ip/otp_ctrl/data:otp_ctrl_regs",
         "//hw/ip/rv_core_ibex/data:rv_core_ibex_regs",
         "//hw/ip/sram_ctrl/data:sram_ctrl_regs",
+        "//hw/ip/uart/data:uart_regs",
         "//hw/top_earlgrey/ip/flash_ctrl/data/autogen:flash_ctrl_regs",
+        "//hw/top_earlgrey/ip/rstmgr/data/autogen:rstmgr_regs",
         "//hw/top_earlgrey/sw/autogen:top_earlgrey",
+        "//sw/device/lib/arch:device",
         "//sw/device/lib/base",
         "//sw/device/lib/base:abs_mmio",
         "//sw/device/silicon_creator/lib/drivers:alert",
@@ -305,19 +326,21 @@ cc_test(
     ],
     deps = [
         ":error",
-        ":log",
         ":shutdown_intf",
         "//hw/ip/keymgr/data:keymgr_regs",
         "//hw/ip/lc_ctrl/data:lc_ctrl_regs",
         "//hw/ip/otp_ctrl/data:otp_ctrl_regs",
         "//hw/ip/rv_core_ibex/data:rv_core_ibex_regs",
         "//hw/ip/sram_ctrl/data:sram_ctrl_regs",
+        "//hw/ip/uart/data:uart_regs",
         "//hw/top_earlgrey:alert_handler_regs",
         "//hw/top_earlgrey/ip/flash_ctrl/data/autogen:flash_ctrl_regs",
+        "//hw/top_earlgrey/ip/rstmgr/data/autogen:rstmgr_regs",
         "//hw/top_earlgrey/sw/autogen:top_earlgrey",
+        "//sw/device/lib/arch:device",
         "//sw/device/lib/base",
-        "//sw/device/silicon_creator/lib/base:mock_abs_mmio",
-        "//sw/device/silicon_creator/lib/drivers:lifecycle",
+        "//sw/device/lib/base/testing:mock_abs_mmio",
+        "//sw/device/silicon_creator/lib/drivers:mock_lifecycle",
         "//sw/device/silicon_creator/lib/drivers:mock_alert",
         "//sw/device/silicon_creator/lib/drivers:mock_otp",
         "//sw/device/silicon_creator/testing:mask_rom_test",
@@ -506,6 +529,7 @@ cc_library(
     ],
     deps = [
         ":sigverify_internal",
+        "//sw/device/lib/base/testing:global_mock",
         "//sw/device/silicon_creator/testing:mask_rom_test",
         "@googletest//:gtest",
     ],

@@ -179,19 +179,79 @@
       package: "flash_ctrl_pkg"
     }
 
+    { struct: "ast_obs_ctrl",
+      type: "uni",
+      name: "obs_ctrl",
+      act: "rcv",
+      package: "ast_pkg"
+    }
+
+    { struct: "logic",
+      type: "uni",
+      name: "fla_obs",
+      act: "req",
+      width: "8",
+      package: ""
+    }
+
   ],
   countermeasures: [
     { name: "BUS.INTEGRITY",
       desc: "End-to-end bus integrity scheme."
     }
-
-    { name: "FSM.SPARSE",
-      desc: "sparse fsm encoding in life cycle interface."
-    }
-
     { name: "SCRAMBLE.KEY.SIDELOAD",
       desc: "The scrambling key is sideloaded from OTP and thus unreadable by SW."
     }
+    { name: "LC_CTRL.INTERSIG.MUBI",
+      desc: "End-to-end bus integrity scheme."
+    }
+    { name: "CTRL.CONFIG.REGWEN",
+      desc: "Main control flow protected operation regwen."
+    }
+    { name: "DATA_REGIONS.CONFIG.REGWEN",
+      desc: "Each data region has a configurable regwen."
+    }
+    { name: "DATA_REGIONS.CONFIG.SHADOW",
+      desc: "Data region configuration is shadowed."
+    }
+    { name: "INFO_REGIONS.CONFIG.REGWEN",
+      desc: "Each info page of each type in each bank has separate regwen."
+    }
+    { name: "INFO_REGIONS.CONFIG.SHADOW",
+      desc: "Each info page of each type in each bank has separate regwen."
+    }
+    { name: "BANK.CONFIG.REGWEN",
+      desc: "Each bank has separate regwen for bank erase."
+    }
+    { name: "BANK.CONFIG.SHADOW",
+      desc: "Each bank has separate regwen for bank erase."
+    }
+    { name: "MEM.CTRL.GLOBAL_ESC",
+      desc: "Global escalation causes memory to no longer be accessible."
+    }
+    { name: "MEM_DISABLE.CONFIG.MUBI",
+      desc: "Software control for flash disable is multibit."
+    }
+    { name: "MEM_EN.CONFIG.REDUN",
+      desc: "Software control for flash enable is 32-bit constant."
+    }
+    { name: "MEM.SCRAMBLE",
+      desc: "Memory is XEX scrambled."
+    }
+    { name: "MEM.INTEGRITY",
+      desc: "Memory is protected with two layers of ECC integrity."
+    }
+    { name: "RMA_ENTRY.MEM.SEC_WIPE",
+      desc: "RMA entry entry wipes flash memory with random data."
+    }
+    { name: "FSM.SPARSE",
+      desc: "RMA handling FSMs are sparsely encoded."
+    }
+    { name: "CTR.SPARSE",
+      desc: "RMA handling counters are sparsely encoded."
+    }
+
+
   ]
 
   scan: "true",       // Enable `scanmode_i` port
@@ -270,7 +330,13 @@
     },
 
     // The following parameters are derived from topgen and should not be
-    // direclty modified.
+    // directly modified.
+    { name: "NumInfoTypes",
+      desc: "Number of info partition types",
+      type: "int",
+      default: "${cfg.info_types}",
+      local: "true"
+    },
     % for type in range(cfg.info_types):
     { name: "NumInfos${type}",
       desc: "Number of configurable flash info pages for info type ${type}",
@@ -527,7 +593,10 @@
           },
           { bits: "27:16",
             name: "NUM",
-            desc: "Number of bus words the flash operation should read or program.",
+            desc: '''
+	      One fewer than the number of bus words the flash operation should read or program.
+	      For example, to read 10 words, software should program this field with the value 9.
+	    '''
             resval: "0"
           },
         ]
@@ -1086,6 +1155,12 @@
             name: "storage_err",
             desc: '''
               A shadow register encountered a storage fault.
+            '''
+          },
+          { bits: "11",
+            name: "seed_err",
+            desc: '''
+              The seed reading process encountered an unexpected error.
             '''
           },
         ]

@@ -139,6 +139,18 @@ package kmac_env_pkg;
   } kmac_status_e;
 
   typedef enum int {
+    KmacPrescaler = 0,
+    KmacWaitTimer = 16
+  } kmac_entropy_period_e;
+
+
+  typedef enum int {
+    KmacCmdIdx = 3,
+    KmacEntropyReqIdx = 8,
+    KmacHashCntClrIdx = 9
+  } kmac_cmd_idx_e;
+
+  typedef enum int {
     AppKeymgr,
     AppLc,
     AppRom
@@ -166,8 +178,8 @@ package kmac_env_pkg;
     ErrStSqueezing
   } kmac_err_st_e;
 
-  typedef virtual pins_if#(1)       idle_vif;
   typedef virtual key_sideload_if   sideload_vif;
+  typedef virtual kmac_if           kmac_vif;
 
   // Helper functions that returns the KMAC key size in bytes/words/blocks
   function automatic int get_key_size_bytes(kmac_pkg::key_len_e len);

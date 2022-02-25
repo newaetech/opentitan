@@ -45,6 +45,19 @@ package spi_device_env_pkg;
     TpmCrbMode
   } tpm_cfg_mode_e;
 
+  typedef enum {
+    GenericMode,
+    FlashMode,
+    PassthroughMode
+  } device_mode_e;
+
+  typedef enum {
+    AddrDisabled,
+    AddrCfg,
+    Addr3B,
+    Addr4B
+  } addr_mode_e;
+
   // alerts
   parameter uint NUM_ALERTS = 1;
   parameter string LIST_OF_ALERTS[] = {"fatal_fault"};

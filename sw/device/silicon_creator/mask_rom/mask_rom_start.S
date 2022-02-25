@@ -106,6 +106,17 @@ _mask_rom_interrupt_vector_c:
   .option pop
 
 /**
+ * Mask ROM shadow stack.
+ */
+
+  .bss
+  .globl _mask_rom_shadow_stack
+  .align 4
+_mask_rom_shadow_stack:
+  .space 256*4
+  .size _mask_rom_shadow_stack, .-_mask_rom_shadow_stack
+
+/**
  * Mask ROM runtime initialization code.
  */
 
@@ -191,8 +202,7 @@ _mask_rom_start_boot:
   // to prevent the release of FIPS entropy until all the thresholds are set
   li t0, (0x5 << ENTROPY_SRC_CONF_FIPS_ENABLE_OFFSET) | \
          (0x5 << ENTROPY_SRC_CONF_ENTROPY_DATA_REG_ENABLE_OFFSET) | \
-         (0x5 << ENTROPY_SRC_CONF_BOOT_BYPASS_DISABLE_OFFSET) | \
-         (0x5 << ENTROPY_SRC_CONF_HEALTH_TEST_CLR_OFFSET) | \
+         (0x5 << ENTROPY_SRC_CONF_THRESHOLD_SCOPE_OFFSET) | \
          (0x5 << ENTROPY_SRC_CONF_RNG_BIT_ENABLE_OFFSET)
   sw t0, ENTROPY_SRC_CONF_REG_OFFSET(a0)
 
@@ -287,6 +297,11 @@ _mask_rom_start_boot:
   // If an exception fires, the handler is conventionally only allowed to clobber
   // memory at addresses below `sp`.
   la sp, (_stack_end - 16)
+
+  // Set up shadow stack pointer.
+  //
+  // The shadow stack, unlike the regular stack, grows upwards.
+  la x18, _mask_rom_shadow_stack
 
   // Set up global pointer.
   //

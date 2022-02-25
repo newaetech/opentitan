@@ -36,18 +36,19 @@ can be used.
 
 import argparse
 import glob
-import hjson
 import logging
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
+import hjson
 from mako.template import Template
 
-from autogen_banner import get_autogen_banner
-from make_new_dif.ip import Ip
 import topgen.lib as lib
+from autogen_banner import get_autogen_banner
+from autogen_testutils.gen import gen_testutils
+from make_new_dif.ip import Ip
 
 # This file is $REPO_TOP/util/make_new_dif.py, so it takes two parent()
 # calls to get back to the top.
@@ -68,10 +69,8 @@ def main():
         default="new",
         required=True,
         help="mode to generate DIF code. Use 'new' if no DIF code exists."
-        "Use 'rege' to regenerate all auto-generated DIFs for all IPs.")
-    parser.add_argument("--topcfg",
-                        "-t",
-                        help="path of the top hjson file.")
+        "Use 'regen' to regenerate all auto-generated DIFs for all IPs.")
+    parser.add_argument("--topcfg", "-t", help="path of the top hjson file.")
     parser.add_argument("--ip-name-snake",
                         "-i",
                         help="the short name of the IP, in snake_case.")
@@ -88,22 +87,18 @@ def main():
     # Parse CMD line args.
     ips = []
 
-    # hjson path
+    # Parse toplevel Hjson to get IPs that are templated / generated with IPgen.
     topcfg_path = REPO_TOP / "hw/top_earlgrey/data/top_earlgrey.hjson"
     if args.topcfg:
         topcfg_path = args.topcfg
-
     try:
         with open(topcfg_path, 'r') as ftop:
-            topcfg = hjson.load(ftop,
-                                use_decimal=True)
+            topcfg = hjson.load(ftop, use_decimal=True)
     except FileNotFoundError:
         print(f"hjson {topcfg_path} could not be found")
         sys.exit(1)
-
     templated_modules = lib.get_templated_modules(topcfg)
     ipgen_modules = lib.get_ipgen_modules(topcfg)
-    print (f"modules {templated_modules} {ipgen_modules}")
 
     # Check for regeneration mode (used in CI check:
     # ci/scripts/check-generated.sh)
@@ -120,12 +115,14 @@ def main():
             ip_name_snake = Path(autogen_src_filename).stem[4:-8]
             # NOTE: ip.name_long_* not needed for auto-generated files which
             # are the only files (re-)generated in regen mode.
-            ips.append(Ip(ip_name_snake, "AUTOGEN",
-                          templated_modules, ipgen_modules))
+            ips.append(
+                Ip(ip_name_snake, "AUTOGEN", templated_modules, ipgen_modules))
     else:
         assert args.ip_name_snake and args.ip_name_long, \
             "ERROR: pass --ip-name-snake and --ip-name-long when --mode=new."
-        ips.append(Ip(args.ip_name_snake, args.ip_name_long))
+        ips.append(
+            Ip(args.ip_name_snake, args.ip_name_long, templated_modules,
+               ipgen_modules))
 
     # Default to generating all parts.
     if len(args.only) == 0:
@@ -136,6 +133,7 @@ def main():
         dif_dir.mkdir(exist_ok=True)
         autogen_dif_dir.mkdir(exist_ok=True)
 
+    # Render DIF templates.
     for ip in ips:
         if "header" in args.only:
             header_template_file = (
@@ -197,6 +195,10 @@ def main():
             checklist_out_file.write_text(markdown_template.render(ip=ip))
             print("DIF Checklist successfully written to {}.".format(
                 str(checklist_out_file)))
+
+    # Render testutils templates.
+    if args.mode == "regen" or "autogen" in args.only:
+        gen_testutils(ips)
 
 
 if __name__ == "__main__":

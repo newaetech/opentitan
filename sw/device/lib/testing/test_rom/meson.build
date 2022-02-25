@@ -9,23 +9,23 @@ chip_info_h = declare_dependency(
     output: 'chip_info.h',
     command: [
       prog_python,
-      meson.source_root() / 'util/rom_chip_info.py',
+      meson.project_source_root() / 'util/rom_chip_info.py',
       '--outdir', '@OUTDIR@',
       '--ot_version', ot_version,
     ],
     depend_files: [
-      meson.source_root() / 'util/rom_chip_info.py',
+      meson.project_source_root() / 'util/rom_chip_info.py',
     ],
   )],
 )
 
 # Test ROM linker parameters.
 #
-# See `sw/device/lib/testing/test_rom_ext/test_rom_ext.ld` for additional info
+# See `sw/device/lib/testing/test_framework/ottf.ld` for additional info
 # about these parameters.
-test_rom_linker_script = '@0@/@1@'.format(meson.source_root(), files(['test_rom.ld'])[0])
+test_rom_linker_script = '@0@/@1@'.format(meson.project_source_root(), files(['test_rom.ld'])[0])
 test_rom_link_args = [
-  '-Wl,-L,@0@'.format(meson.source_root()),
+  '-Wl,-L,@0@'.format(meson.project_source_root()),
   '-Wl,-T,@0@'.format(test_rom_linker_script),
   '-Wl,--build-id=none',
 ]
@@ -35,10 +35,13 @@ foreach device_name, device_lib : sw_lib_arch_core_devices
   test_rom_elf = executable(
     'test_rom_' + device_name,
     sources: [
-      hw_ip_sram_ctrl_reg_h,
-      hw_ip_entropy_src_reg_h,
+      hw_ip_ast_reg_h,
       hw_ip_csrng_reg_h,
       hw_ip_edn_reg_h,
+      hw_ip_entropy_src_reg_h,
+      hw_ip_otp_ctrl_reg_h,
+      hw_ip_sram_ctrl_reg_h,
+      hw_ip_sensor_ctrl_reg_h,
       'test_rom.c',
       'bootstrap.c',
       'test_rom_start.S',

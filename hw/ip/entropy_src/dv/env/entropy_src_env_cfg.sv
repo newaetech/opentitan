@@ -25,95 +25,156 @@ class entropy_src_env_cfg extends cip_base_env_cfg #(.RAL_T(entropy_src_reg_bloc
   // When selecting fixed duration, the total simulated duration of the test is approximately
   // equal to cfg.sim_duration
   //
+  // TODO: Randomize & constrain the following values
   realtime sim_duration;
-  int      seed_cnt;
 
   // Mean time before hard RNG failure
   realtime hard_mtbf;
   // Mean time before "soft" RNG failure (still functions but less entropy per bit)
   realtime soft_mtbf;
 
-  // When expecting an alert, the cip scoreboarding routines expect a to see the
-  // alert within alert_max_delay clock cycles.
-  int      alert_max_delay;
+  int      seed_cnt;
 
-  rand int unsigned adaptp_sigma_i, markov_sigma_i, bucket_sigma_i;
-  // Randomized real values: to be managed in post_randomized
-  // Controlled by the knobs <test>_sigma_max, <test>_sigma_min
-  // Updated by post_randomize()
-  real              adaptp_sigma, markov_sigma, bucket_sigma;
+  uint     fips_window_size, bypass_window_size, boot_mode_retry_limit;
 
-  // Knobs & Weights
-  uint          enable_pct, route_software_pct, regwen_pct,
-                otp_en_es_fw_read_pct, otp_en_es_fw_over_pct,
-                type_bypass_pct, boot_bypass_disable_pct,
-                entropy_data_reg_enable_pct, rng_bit_enable_pct,
-                do_check_ht_diag_pct;
+  /////////////////////
+  // Knobs & Weights //
+  /////////////////////
 
-  // Health test knobs:
+  // Constraint knob for module_enable field
+  uint          module_enable_pct;
+
+  // Constraint knob for SW-accessible REGWEN-related fields
+  uint          me_regwen_pct, sw_regupd_pct;
+
+  // Constraint knobs for Boolean fields in CONF register
+  // (RNG_BIT_SEL is always uniform)
+  uint          fips_enable_pct, entropy_data_reg_enable_pct, ht_threshold_scope_pct,
+                rng_bit_enable_pct;
+
+  // Constraint knobs for Boolean fields in ENTROPY_CONTROL register
+  uint          route_software_pct, type_bypass_pct;
+
+  // Constraint knobs for Boolean fields in FW_OV_CONTROL register
+  uint          fw_read_pct, fw_over_pct;
+
+  // Constraint knobs for OTP-driven inputs
+  uint          otp_en_es_fw_read_pct, otp_en_es_fw_over_pct;
+
+  // Behavioral constrint knob: dictates how often each sequence
+  // performs a seurvey of the health test diagnostics.
+  // (100% corresponds to a full diagnostic chack after every HT alert,
+  // If less than 100%, this full-diagnostic is skipped after some alerts)
+  uint          do_check_ht_diag_pct;
+
+  // Health test-related knobs
+  // Real constraints on sigma ranges (floating point value)
   real adaptp_sigma_max, adaptp_sigma_min;
   real markov_sigma_max, markov_sigma_min;
   real bucket_sigma_max, bucket_sigma_min;
 
-  rand bit         regwen;
-  rand bit [1:0]   rng_bit_sel;
+  ///////////////////////
+  // Randomized fields //
+  ///////////////////////
 
-  rand prim_mubi_pkg::mubi4_t   enable, route_software, type_bypass,
-                                boot_bypass_disable, entropy_data_reg_enable,
-                                rng_bit_enable;
+  rand bit                      sw_regupd, me_regwen;
+  rand bit [1:0]                rng_bit_sel;
 
-  // TODO: randomize
-  uint fips_window_size, bypass_window_size, boot_mode_retry_limit;
+  rand prim_mubi_pkg::mubi4_t   module_enable, fips_enable, route_software, type_bypass,
+                                entropy_data_reg_enable, rng_bit_enable, ht_threshold_scope;
+
+  rand int                      observe_fifo_thresh;
 
   rand prim_mubi_pkg::mubi8_t   otp_en_es_fw_read, otp_en_es_fw_over;
+  rand prim_mubi_pkg::mubi4_t   fw_read_enable, fw_over_enable;
 
-  //
-  // Implementation-specific constants related to the DUT
-  // (Needed for accurate prediction, no randomization required)
-  //
+
+  // Note: These integer-valued fields are used to derive their real-valued counterparts.
+  rand int unsigned adaptp_sigma_i, markov_sigma_i, bucket_sigma_i;
+
+  // Randomized real values: to be managed in post_randomize
+  // Controlled by the knobs <test>_sigma_max, <test>_sigma_min
+  real              adaptp_sigma, markov_sigma, bucket_sigma;
+
+  /////////////////////////////////////////////////////////////////
+  // Implementation-specific constants related to the DUT        //
+  // (Needed for accurate prediction, no randomization required) //
+  /////////////////////////////////////////////////////////////////
 
   // Number of clock cycles between a TLUL disable signal, and deassertion
   // of enable on the RNG bus.
-  int  tlul2rng_disable_delay = 1;
 
-  // Constraints
-  constraint c_regwen {regwen dist {
-      1 :/ regwen_pct,
-      0 :/ (100 - regwen_pct) };}
+  int tlul2rng_disable_delay = 1;
 
-  constraint c_otp_en_es_fw_read {otp_en_es_fw_read dist {
+  // When expecting an alert, the cip scoreboarding routines expect a to see the
+  // alert within alert_max_delay clock cycles.
+  int      alert_max_delay;
+
+  /////////////////
+  // Constraints //
+  /////////////////
+
+  constraint sw_regupd_c {sw_regupd dist {
+      1 :/ sw_regupd_pct,
+      0 :/ (100 - sw_regupd_pct) };}
+
+  constraint me_regwen_c {me_regwen dist {
+      1 :/ me_regwen_pct,
+      0 :/ (100 - me_regwen_pct) };}
+
+  constraint otp_en_es_fw_read_c {otp_en_es_fw_read dist {
       prim_mubi_pkg::MuBi8True  :/ otp_en_es_fw_read_pct,
       prim_mubi_pkg::MuBi8False :/ (100 - otp_en_es_fw_read_pct) };}
 
-  constraint c_otp_en_es_fw_over {otp_en_es_fw_over dist {
+  constraint otp_en_es_fw_over_c {otp_en_es_fw_over dist {
       prim_mubi_pkg::MuBi8True  :/ otp_en_es_fw_over_pct,
       prim_mubi_pkg::MuBi8False :/ (100 - otp_en_es_fw_over_pct) };}
 
-  constraint c_enable {enable dist {
-      prim_mubi_pkg::MuBi4True  :/ enable_pct,
-      prim_mubi_pkg::MuBi4False :/ 100 - enable_pct };}
+  constraint fw_read_enable_c {fw_read_enable dist {
+      prim_mubi_pkg::MuBi4True  :/ fw_read_pct,
+      prim_mubi_pkg::MuBi4False :/ (100 - fw_read_pct) };}
 
-  constraint c_route {route_software dist {
+  constraint fw_over_enable_c {fw_over_enable dist {
+      prim_mubi_pkg::MuBi4True  :/ fw_over_pct,
+      prim_mubi_pkg::MuBi4False :/ (100 - fw_over_pct) };}
+
+  constraint module_enable_c {module_enable dist {
+      prim_mubi_pkg::MuBi4True  :/ module_enable_pct,
+      prim_mubi_pkg::MuBi4False :/ 100 - module_enable_pct };}
+
+  constraint fips_enable_c {fips_enable dist {
+      prim_mubi_pkg::MuBi4True  :/ fips_enable_pct,
+      prim_mubi_pkg::MuBi4False :/ 100 - fips_enable_pct };}
+
+  constraint route_c {route_software dist {
       prim_mubi_pkg::MuBi4True  :/ route_software_pct,
       prim_mubi_pkg::MuBi4False :/ (100 - route_software_pct) };}
 
-  constraint c_bypass {type_bypass dist {
+  constraint bypass_c {type_bypass dist {
       prim_mubi_pkg::MuBi4True  :/ type_bypass_pct,
       prim_mubi_pkg::MuBi4False :/ (100 - type_bypass_pct) };}
 
-  constraint c_boot_bypass_disable {boot_bypass_disable dist {
-      prim_mubi_pkg::MuBi4True  :/ boot_bypass_disable_pct,
-      prim_mubi_pkg::MuBi4False :/ (100 - boot_bypass_disable_pct)};}
-
-  constraint c_entropy_data_reg_enable {entropy_data_reg_enable dist {
+  constraint entropy_data_reg_enable_c {entropy_data_reg_enable dist {
       prim_mubi_pkg::MuBi4True  :/ entropy_data_reg_enable_pct,
       prim_mubi_pkg::MuBi4False :/ (100 - entropy_data_reg_enable_pct)};}
 
-  constraint c_rng_bit_enable {rng_bit_enable dist {
+  constraint rng_bit_enable_c {rng_bit_enable dist {
       prim_mubi_pkg::MuBi4True  :/ rng_bit_enable_pct,
       prim_mubi_pkg::MuBi4False :/ (100 - rng_bit_enable_pct)};}
 
-  // Functions
+  constraint ht_threshold_scope_c {ht_threshold_scope dist {
+      prim_mubi_pkg::MuBi4True  :/ ht_threshold_scope_pct,
+      prim_mubi_pkg::MuBi4False :/ (100 - ht_threshold_scope_pct)};}
+
+  // TODO: Is zero a valid value for this register?
+  // What does the DUT do with a value of zero?
+  constraint observe_fifo_thresh_c {observe_fifo_thresh dist {
+      [1:OBSERVE_FIFO_DEPTH]  :/ 1};}
+
+  ///////////////
+  // Functions //
+  ///////////////
+
   virtual function void initialize(bit [31:0] csr_base_addr = '1);
     list_of_alerts = entropy_src_env_pkg::LIST_OF_ALERTS;
     tl_intg_alert_name = "fatal_alert";
@@ -145,16 +206,16 @@ class entropy_src_env_cfg extends cip_base_env_cfg #(.RAL_T(entropy_src_reg_bloc
              otp_en_es_fw_read.name()),
         $sformatf("\n\t |***** otp_en_es_fw_over           : %12s *****| \t",
                   otp_en_es_fw_over.name()),
-        $sformatf("\n\t |***** enable                      : %12s *****| \t",
-                 enable.name()),
+        $sformatf("\n\t |***** module_enable               : %12s *****| \t",
+                 module_enable.name()),
+        $sformatf("\n\t |***** fips_enable                 : %12s *****| \t",
+                 fips_enable.name()),
         $sformatf("\n\t |***** route_software              : %12s *****| \t",
                   route_software.name()),
         $sformatf("\n\t |***** type_bypass                 : %12s *****| \t",
                    type_bypass.name()),
         $sformatf("\n\t |***** entropy_data_reg_enable     : %12s *****| \t",
                   entropy_data_reg_enable.name()),
-        $sformatf("\n\t |***** boot_bypass_disable         : %12s *****| \t",
-                  boot_bypass_disable.name()),
         $sformatf("\n\t |***** rng_bit_enable              : %12s *****| \t",
                   rng_bit_enable.name()),
         $sformatf("\n\t |***** rng_bit_sel                 : %12d *****| \t",
@@ -165,6 +226,12 @@ class entropy_src_env_cfg extends cip_base_env_cfg #(.RAL_T(entropy_src_reg_bloc
                   bypass_window_size),
         $sformatf("\n\t |***** boot_mode_retry_limit       : %12d *****| \t",
                   boot_mode_retry_limit),
+        $sformatf("\n\t |***** fw_read_enable              : %12s *****| \t",
+                  fw_read_enable.name()),
+        $sformatf("\n\t |***** fw_over_enable              : %12s *****| \t",
+                  fw_over_enable.name()),
+        $sformatf("\n\t |***** observe_fifo_threshold      : %12d *****| \t",
+                  observe_fifo_thresh),
         $sformatf("\n\t |***** seed_cnt                    : %12d *****| \t",
                   seed_cnt),
         $sformatf("\n\t |***** sim_duration                : %9.2f ms *****| \t",
@@ -185,16 +252,20 @@ class entropy_src_env_cfg extends cip_base_env_cfg #(.RAL_T(entropy_src_reg_bloc
                   otp_en_es_fw_read_pct),
         $sformatf("\n\t |***** otp_en_es_fw_over_pct       : %12d *****| \t",
                   otp_en_es_fw_over_pct),
-        $sformatf("\n\t |***** enable_pct                  : %12d *****| \t",
-                  enable_pct),
+        $sformatf("\n\t |***** fw_read_pct                 : %12d *****| \t",
+                  fw_read_pct),
+        $sformatf("\n\t |***** fw_over_pct                 : %12d *****| \t",
+                  fw_over_pct),
+        $sformatf("\n\t |***** module_enable_pct           : %12d *****| \t",
+                  module_enable_pct),
+        $sformatf("\n\t |***** fips_enable_pct             : %12d *****| \t",
+                  fips_enable_pct),
         $sformatf("\n\t |***** route_software_pct          : %12d *****| \t",
                   route_software_pct),
         $sformatf("\n\t |***** type_bypass_pct             : %12d *****| \t",
                   type_bypass_pct),
         $sformatf("\n\t |***** entropy_data_reg_enable_pct : %12d *****| \t",
                   entropy_data_reg_enable_pct),
-        $sformatf("\n\t |***** boot_bypass_disable_pct     : %12d *****| \t",
-                  boot_bypass_disable_pct),
         $sformatf("\n\t |***** rng_bit_enable_pct          : %12d *****| \t",
                   rng_bit_enable_pct),
         $sformatf("\n\t |***** adaptp_sigma range          : (%04.2f, %04.2f) *****| \t",

@@ -15,7 +15,7 @@ cc_library(
     defines = ["MOCK_CSR"],
     deps = [
         "//sw/device/lib/base",
-        "//sw/device/silicon_creator/testing:mask_rom_test",
+        "//sw/device/lib/base/testing:global_mock",
         "@googletest//:gtest",
     ],
 )
@@ -26,21 +26,6 @@ cc_test(
     deps = [
         ":mock_csr",
         "@googletest//:gtest_main",
-    ],
-)
-
-cc_library(
-    name = "mock_abs_mmio",
-    testonly = True,
-    hdrs = [
-        "mock_abs_mmio.h",
-        "//sw/device/lib/base:abs_mmio_h",
-    ],
-    defines = ["MOCK_ABS_MMIO"],
-    deps = [
-        "//sw/device/lib/base/testing",
-        "//sw/device/silicon_creator/testing:mask_rom_test",
-        "@googletest//:gtest",
     ],
 )
 
@@ -65,6 +50,7 @@ cc_library(
     ],
     deps = [
         "//sw/device/lib/base/testing",
+        "//sw/device/lib/base/testing:global_mock",
         "//sw/device/silicon_creator/testing:mask_rom_test",
         "@googletest//:gtest",
     ],
@@ -79,8 +65,8 @@ cc_test(
     ],
     defines = ["OT_OFF_TARGET_TEST"],
     deps = [
-        ":mock_abs_mmio",
         "//sw/device/lib/base",
+        "//sw/device/lib/base/testing:mock_abs_mmio",
         "//sw/device/silicon_creator/lib:error",
         "@googletest//:gtest_main",
     ],

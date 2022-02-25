@@ -28,18 +28,20 @@ _heap_size = 0xe000;
 _stack_size = LENGTH(ram_main) - _heap_size;
 _stack_end = ORIGIN(ram_main) + LENGTH(ram_main);
 _stack_start = _stack_end - _stack_size;
-_vflash_start = ORIGIN(eflash_virtual);
-_vflash_size = LENGTH(eflash_virtual);
 _flash_start = ORIGIN(eflash);
 
 /**
- * This symbol points at the header of the flash binary, which contains loading
- * and signing information.
- *
- * See `sw/device/lib/testing/test_rom_ext/test_rom_ext.ld`, under the
- * .flash_header section, which populates it.
+ * TODO(lowrisc/opentitan:#10712): setup Ibex address translation
  */
-_flash_header = _vflash_start;
+
+/**
+ * This symbol points at the manifest of the OTTF + test binary, which contains
+ * loading and signing information.
+ *
+ * See `sw/device/lib/testing/test_framework/ottf.ld`, under the
+ * .manifest section, which populates it.
+ */
+_manifest = _flash_start;
 
 _rom_digest_size = 32;
 _chip_info_size = 128;

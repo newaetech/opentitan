@@ -4,6 +4,7 @@
 
 #include "sw/device/silicon_creator/lib/sigverify.h"
 
+#include <array>
 #include <cstring>
 #include <limits>
 #include <unordered_set>
@@ -170,7 +171,7 @@ INSTANTIATE_TEST_SUITE_P(NonTestOperationalStates, SigverifyInNonTestStates,
 class SigverifyInNonTestStatesDeathTest : public SigverifyInLcState {};
 
 TEST_P(SigverifyInNonTestStatesDeathTest, BadOtpValue) {
-  ASSERT_DEATH(
+  EXPECT_DEATH(
       {
         EXPECT_CALL(
             otp_,
@@ -222,7 +223,7 @@ TEST_F(SigverifyInTestStates, BadSignatureIbex) {
 class SigverifyBadLcStateDeathTest : public SigverifyInLcState {};
 
 TEST_F(SigverifyBadLcStateDeathTest, BadLcState) {
-  ASSERT_DEATH(
+  EXPECT_DEATH(
       {
         uint32_t flash_exec = 0;
         sigverify_rsa_verify(&kSignature, &key_, &kTestDigest,

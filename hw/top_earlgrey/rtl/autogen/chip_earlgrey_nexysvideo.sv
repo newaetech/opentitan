@@ -82,8 +82,8 @@ module chip_earlgrey_nexysvideo #(
   parameter int Tap1PadIdx = 16;
   parameter int Dft0PadIdx = 23;
   parameter int Dft1PadIdx = 34;
-  parameter int TckPadIdx = 59;
-  parameter int TmsPadIdx = 60;
+  parameter int TckPadIdx = 60;
+  parameter int TmsPadIdx = 61;
   parameter int TrstNPadIdx = 18;
   parameter int TdiPadIdx = 51;
   parameter int TdoPadIdx = 52;
@@ -107,7 +107,6 @@ module chip_earlgrey_nexysvideo #(
     usb_sense_idx:     MioInUsbdevSense,
     // Pad types for attribute WARL behavior
     dio_pad_type: {
-      BidirOd, // DIO sysrst_ctrl_aon_flash_wp_l
       BidirTol, // DIO usbdev_rx_enable
       BidirTol, // DIO usbdev_suspend
       BidirTol, // DIO usbdev_tx_mode_se
@@ -118,6 +117,7 @@ module chip_earlgrey_nexysvideo #(
       BidirStd, // DIO spi_host0_sck
       InputStd, // DIO spi_device_csb
       InputStd, // DIO spi_device_sck
+      BidirOd, // DIO sysrst_ctrl_aon_flash_wp_l
       BidirOd, // DIO sysrst_ctrl_aon_ec_rst_l
       BidirTol, // DIO usbdev_dn
       BidirTol, // DIO usbdev_dp
@@ -682,6 +682,11 @@ module chip_earlgrey_nexysvideo #(
   // monitored clock
   logic sck_monitor;
 
+  // observe interface
+  logic [7:0] fla_obs;
+  logic [7:0] otp_obs;
+  ast_pkg::ast_obs_ctrl_t obs_ctrl;
+
   // otp power sequence
   otp_ctrl_pkg::otp_ast_req_t otp_ctrl_otp_ast_pwr_seq;
   otp_ctrl_pkg::otp_ast_rsp_t otp_ctrl_otp_ast_pwr_seq_h;
@@ -896,6 +901,7 @@ module chip_earlgrey_nexysvideo #(
     .clk_src_io_en_i       ( base_ast_pwr.io_clk_en ),
     .clk_src_io_o          ( ast_base_clks.clk_io ),
     .clk_src_io_val_o      ( ast_base_pwr.io_clk_val ),
+    .clk_src_io_48m_o      (  ),
     // usb source clock
     .usb_ref_pulse_i       ( usb_ref_pulse ),
     .usb_ref_val_i         ( usb_ref_val ),
@@ -923,10 +929,11 @@ module chip_earlgrey_nexysvideo #(
     // dft
     .dft_strap_test_i      ( dft_strap_test   ),
     .lc_dft_en_i           ( dft_en           ),
-    .fla_obs_i             ( '0 ),
-    .otp_obs_i             ( '0 ),
+    .fla_obs_i             ( fla_obs ),
+    .otp_obs_i             ( otp_obs ),
     .otm_obs_i             ( '0 ),
-    .obs_ctrl_o            (  ),
+    .usb_obs_i             ( usb_diff_rx_obs ),
+    .obs_ctrl_o            ( obs_ctrl ),
     // pinmux related
     .padmux2ast_i          ( pad2ast    ),
     .ast2padmux_o          ( ast2pinmux ),
@@ -976,8 +983,8 @@ module chip_earlgrey_nexysvideo #(
 // Also need to add AST simulation and FPGA emulation models for things like entropy source -
 // otherwise Verilator / FPGA will hang.
   top_earlgrey #(
-    .AesMasking(1'b0),
-    .AesSBoxImpl(aes_pkg::SBoxImplLut),
+    .SecAesMasking(1'b0),
+    .SecAesSBoxImpl(aes_pkg::SBoxImplLut),
     .KmacEnMasking(1'b0),
     .KeymgrKmacEnMasking(0),
     .SecAesStartTriggerDelay(0),
@@ -1011,9 +1018,11 @@ module chip_earlgrey_nexysvideo #(
     .usbdev_usb_ref_pulse_o       ( usb_ref_pulse         ),
     .ast_edn_req_i                ( ast_edn_edn_req       ),
     .ast_edn_rsp_o                ( ast_edn_edn_rsp       ),
+    .obs_ctrl_i                   ( obs_ctrl              ),
     .flash_bist_enable_i          ( flash_bist_enable     ),
     .flash_power_down_h_i         ( 1'b0                  ),
     .flash_power_ready_h_i        ( 1'b1                  ),
+    .flash_obs_o                  ( flash_obs             ),
     .io_clk_byp_req_o             ( io_clk_byp_req        ),
     .io_clk_byp_ack_i             ( io_clk_byp_ack        ),
     .all_clk_byp_req_o            ( all_clk_byp_req       ),
@@ -1027,6 +1036,7 @@ module chip_earlgrey_nexysvideo #(
     .otp_ctrl_otp_ast_pwr_seq_o   ( otp_ctrl_otp_ast_pwr_seq   ),
     .otp_ctrl_otp_ast_pwr_seq_h_i ( otp_ctrl_otp_ast_pwr_seq_h ),
     .otp_alert_o                  ( otp_alert                  ),
+    .otp_obs_o                    ( otp_obs                    ),
     .sensor_ctrl_ast_alert_req_i  ( ast_alert_req              ),
     .sensor_ctrl_ast_alert_rsp_o  ( ast_alert_rsp              ),
     .sensor_ctrl_ast_status_i     ( ast_pwst.io_pok            ),

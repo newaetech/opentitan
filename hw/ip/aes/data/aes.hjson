@@ -28,17 +28,17 @@
       local:   "false",
       expose:  "false"
     },
-    { name:    "Masking",
+    { name:    "SecMasking",
       type:    "bit",
       default: "1'b1",
       desc:    '''
         Disable (0) or enable (1) first-order masking of the AES cipher core.
-        Masking requires the use of a masked S-Box, see SBoxImpl parameter.
+        Masking requires the use of a masked S-Box, see SecSBoxImpl parameter.
       '''
       local:   "false",
       expose:  "true"
     },
-    { name:    "SBoxImpl",
+    { name:    "SecSBoxImpl",
       type:    "aes_pkg::sbox_impl_e",
       default: "aes_pkg::SBoxImplDom",
       desc:    '''
@@ -239,9 +239,6 @@
     { name: "KEY.SW_UNREADABLE",
       desc: "Key registers are not readable by software."
     }
-    { name: "IV.CONFIG.SW_UNREADABLE",
-      desc: "IV registers are not readable by software."
-    }
     { name: "DATA_REG.SW_UNREADABLE",
       desc: "Data input and internal state registers are not readable by software."
     }
@@ -405,16 +402,17 @@
       '''
       count: "NumRegsIv",
       cname: "IV",
-      swaccess: "wo",
+      swaccess: "rw",
       hwaccess: "hrw",
       hwext:    "true",
       hwqe:     "true",
       fields: [
         { bits: "31:0", name: "iv", desc: "Initialization Vector" }
       ],
-      tags: [// Updates based on writes to other regs.
+      tags: [// Updated by the HW.
+             // Updates based on writes to other regs.
              // These registers are reset to 0, but the reset also triggers internal operations that clear these registers with pseudo-random data shortly afterwards (See Trigger Register).
-             "excl:CsrHwResetTest:CsrExclCheck"]
+             "excl:CsrAllTests:CsrExclCheck"]
       }
     },
 ##############################################################################

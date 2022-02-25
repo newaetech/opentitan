@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::Result;
 use log;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -10,6 +9,7 @@ use std::rc::Rc;
 use crate::io::spi::{SpiError, Target, Transfer, TransferMode};
 use crate::transport::cw310::usb::Backend;
 use crate::transport::cw310::CW310;
+use crate::transport::Result;
 
 pub struct CW310Spi {
     device: Rc<RefCell<Backend>>,
@@ -84,13 +84,13 @@ impl Target for CW310Spi {
         Ok(())
     }
 
-    fn get_max_transfer_count(&self) -> usize {
+    fn get_max_transfer_count(&self) -> Result<usize> {
         // Arbitrary value: number of `Transfers` that can be in a single transaction.
-        42
+        Ok(42)
     }
 
-    fn max_chunk_size(&self) -> usize {
-        65536
+    fn max_chunk_size(&self) -> Result<usize> {
+        Ok(65536)
     }
 
     fn run_transaction(&self, transaction: &mut [Transfer]) -> Result<()> {

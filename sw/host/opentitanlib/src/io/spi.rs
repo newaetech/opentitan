@@ -2,13 +2,14 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use std::rc::Rc;
 use std::str::FromStr;
 use structopt::StructOpt;
 use thiserror::Error;
 
 use crate::app::TransportWrapper;
+use crate::transport::Result;
 use crate::util::voltage::Voltage;
 
 #[derive(Debug, StructOpt)]
@@ -42,8 +43,10 @@ impl SpiParams {
     }
 }
 
-/// Errors related to the SPI interface and SPI transactions.
-#[derive(Error, Debug)]
+/// Errors related to the SPI interface and SPI transactions.  These error messages will be
+/// printed in the context of a TransportError::SpiError, that is "SPI error: {}".  So including
+/// the words "error" or "spi" in texts below will probably be redundant.
+#[derive(Error, Debug, Serialize, Deserialize)]
 pub enum SpiError {
     #[error("Invalid option: {0}")]
     InvalidOption(String),
@@ -62,7 +65,7 @@ pub enum SpiError {
 /// Represents the SPI transfer mode.
 /// See https://en.wikipedia.org/wiki/Serial_Peripheral_Interface#Clock_polarity_and_phase
 /// for details about SPI transfer modes.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum TransferMode {
     /// `Mode0` is CPOL=0, CPHA=0.
     Mode0,
@@ -87,13 +90,13 @@ impl FromStr for TransferMode {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum ClockPhase {
     SampleLeading,
     SampleTrailing,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum ClockPolarity {
     IdleLow,
     IdleHigh,
@@ -139,10 +142,10 @@ pub trait Target {
     fn set_max_speed(&self, max_speed: u32) -> Result<()>;
 
     /// Returns the maximum number of transfers allowed in a single transaction.
-    fn get_max_transfer_count(&self) -> usize;
+    fn get_max_transfer_count(&self) -> Result<usize>;
 
     /// Maximum chunksize handled by this SPI device.
-    fn max_chunk_size(&self) -> usize;
+    fn max_chunk_size(&self) -> Result<usize>;
 
     fn set_voltage(&self, _voltage: Voltage) -> Result<()> {
         Err(SpiError::InvalidOption("This target does not support set_voltage".to_string()).into())

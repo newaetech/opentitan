@@ -40,6 +40,9 @@ module otp_ctrl
   // Alerts
   input  prim_alert_pkg::alert_rx_t [NumAlerts-1:0]  alert_rx_i,
   output prim_alert_pkg::alert_tx_t [NumAlerts-1:0]  alert_tx_o,
+  // Observability to AST
+  input ast_pkg::ast_obs_ctrl_t obs_ctrl_i,
+  output logic [7:0] otp_obs_o,
   // Macro-specific power sequencing signals to/from AST.
   output otp_ast_req_t                               otp_ast_pwr_seq_o,
   input  otp_ast_rsp_t                               otp_ast_pwr_seq_h_i,
@@ -747,6 +750,9 @@ module otp_ctrl
   ) u_otp (
     .clk_i,
     .rst_ni,
+    // Observability controls to/from AST
+    .obs_ctrl_i,
+    .otp_obs_o,
     // Power sequencing signals to/from AST
     .pwr_seq_o        ( otp_ast_pwr_seq_o.pwr_seq     ),
     .pwr_seq_h_i      ( otp_ast_pwr_seq_h_i.pwr_seq_h ),
@@ -1285,7 +1291,7 @@ module otp_ctrl
   assign otp_lc_data_o.rma_token         = part_buf_data[RmaTokenOffset +:
                                                          RmaTokenSize];
 
-  logic [lc_ctrl_pkg::TxWidth-1:0] test_tokens_valid, rma_token_valid, secrets_valid;
+  lc_ctrl_pkg::lc_tx_t test_tokens_valid, rma_token_valid, secrets_valid;
   // The test tokens have been provisioned.
   assign test_tokens_valid = (part_digest[Secret0Idx] != '0) ? lc_ctrl_pkg::On : lc_ctrl_pkg::Off;
   // The rma token has been provisioned.

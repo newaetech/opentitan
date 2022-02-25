@@ -71,6 +71,9 @@ class kmac_base_vseq extends cip_base_vseq #(
   // entropy ready
   rand bit entropy_ready;
 
+  // Message masking
+  rand bit msg_mask;
+
   // output length in bytes.
   rand int unsigned output_len;
 
@@ -110,6 +113,10 @@ class kmac_base_vseq extends cip_base_vseq #(
   // as well as the proper random incorrect command to send.
   rand sha3_pkg::sha3_st_e err_sw_cmd_seq_st;
   rand kmac_pkg::kmac_cmd_e err_sw_cmd_seq_cmd;
+
+  // Entropy related variables
+  rand bit [9:0] hash_threshold;
+  rand bit hash_cnt_clr;
 
   // array to store `right_encode(output_len)`
   bit [7:0] output_len_enc[];
@@ -245,6 +252,10 @@ class kmac_base_vseq extends cip_base_vseq #(
   }
 
   virtual task dut_init(string reset_kind = "HARD");
+    // KMAC has dut and edn reset. If assign kmac_vif_init() values after `super.dut_init()`,
+    // and if dut reset deasserts earlier than edn reset, some KMAC outputs might remain X or Z
+    // when dut clock is running.
+    kmac_vif_init();
     super.dut_init();
     if (do_kmac_init) kmac_init();
   endtask
@@ -260,17 +271,38 @@ class kmac_base_vseq extends cip_base_vseq #(
         static_entropy_mode inside {EntropyModeSw, EntropyModeEdn};)
   endtask
 
+  virtual task kmac_vif_init();
+    // Any value that is not `lc_ctrl_pkg::On` is considered `lc_ctrl_pkg::Off`.
+    cfg.kmac_vif.drive_lc_escalate(lc_ctrl_pkg::Off);
+  endtask
+
   // setup basic kmac features
-  virtual task kmac_init();
+  virtual task kmac_init(bit wait_init = 1);
     // Wait for KMAC to reach idle state
-    wait (cfg.idle_vif.pins == 1);
-    `uvm_info(`gfn, "reached idle state", UVM_HIGH)
+    if (wait_init) begin
+      wait (cfg.kmac_vif.idle_o == 1);
+      `uvm_info(`gfn, "reached idle state", UVM_HIGH)
+    end
 
     // set interrupts
     cfg_interrupts(.interrupts(enable_intr));
+    // For error cases that does not support in scb, predict its value so can be used in
+    // `check_err` task.
+    if (cfg.en_scb == 0) ral.intr_enable.predict(enable_intr);
     `uvm_info(`gfn, $sformatf("intr[KmacDone] = %0b", enable_intr[KmacDone]), UVM_HIGH)
     `uvm_info(`gfn, $sformatf("intr[KmacFifoEmpty] = %0b", enable_intr[KmacFifoEmpty]), UVM_HIGH)
     `uvm_info(`gfn, $sformatf("intr[KmacErr] = %0b", enable_intr[KmacErr]), UVM_HIGH)
+
+    if (kmac_err_type == ErrWaitTimerExpired && entropy_mode == EntropyModeEdn &&
+        cfg.enable_masking) begin
+      csr_wr(.ptr(ral.entropy_period), .value(1'b1 << KmacWaitTimer));
+    end else begin
+      // TODO: write random large values that can avoid timeout.
+      csr_wr(.ptr(ral.entropy_period), .value(0));
+    end
+
+    csr_wr(.ptr(ral.entropy_refresh), .value(hash_threshold));
+    csr_wr(.ptr(ral.cmd), .value(hash_cnt_clr << KmacHashCntClrIdx));
 
     // setup CFG csr with default random values
     ral.cfg_shadowed.kmac_en.set(kmac_en);
@@ -282,6 +314,7 @@ class kmac_base_vseq extends cip_base_vseq #(
     ral.cfg_shadowed.entropy_mode.set(entropy_mode);
     ral.cfg_shadowed.entropy_fast_process.set(entropy_fast_process);
     ral.cfg_shadowed.entropy_ready.set(entropy_ready);
+    ral.cfg_shadowed.msg_mask.set(msg_mask);
     ral.cfg_shadowed.err_processed.set(1'b0);
     csr_update(.csr(ral.cfg_shadowed));
 
@@ -302,7 +335,7 @@ class kmac_base_vseq extends cip_base_vseq #(
     csr_rd(.ptr(ral.status), .value(data));
   endtask
 
-  virtual task check_err(clear_err = 1'b1);
+  virtual task check_err(bit clear_err = 1'b1);
     bit [TL_DW-1:0] err_data;
     // wait for several cycles to allow interrupt to propagate
     cfg.clk_rst_vif.wait_clks(10);
@@ -332,12 +365,13 @@ class kmac_base_vseq extends cip_base_vseq #(
       if (kmac_err_type == kmac_pkg::ErrIncorrectEntropyMode) begin
         `DV_CHECK_MEMBER_RANDOMIZE_FATAL(entropy_mode)
         ral.cfg_shadowed.entropy_mode.set(entropy_mode);
+        // Need to pulse `entropy_ready` once we signal that SW has finished processing
+        // the entropy-related errors, otherwise FSM will be infinitely looping in Reset state
+        // csr_wr(.ptr(ral.cfg_shadowed.entropy_ready), .value(1'b1));
+        ral.cfg_shadowed.entropy_ready.set(1);
       end
       csr_update(.csr(ral.cfg_shadowed));
 
-      // Need to pulse `entropy_ready` once we signal that SW has finished processing
-      // the entropy-related errors, otherwise FSM will be infinitely looping in Reset state
-      csr_wr(.ptr(ral.cfg_shadowed.entropy_ready), .value(1'b1));
     end else if (kmac_err_type == kmac_pkg::ErrKeyNotValid) begin
       ral.cfg_shadowed.err_processed.set(1);
       csr_update(.csr(ral.cfg_shadowed));

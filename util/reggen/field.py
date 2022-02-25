@@ -30,6 +30,12 @@ OPTIONAL_FIELDS = {
         "register if not prvided in field. "
         "(Tool adds if not provided.)"
     ],
+    'hwqe': [
+        'b', "'true' if hardware uses 'q' enable signal, "
+        "which is latched signal of software write pulse. "
+        "Copied from register if not provided in field. "
+        "(Tool adds if not provided.)"
+    ],
     'resval': [
         'x', "reset value, comes from register resval "
         "if not provided in field. Zero if neither "
@@ -56,17 +62,21 @@ class Field:
                  tags: List[str],
                  swaccess: SWAccess,
                  hwaccess: HWAccess,
+                 hwqe: bool,
                  bits: Bits,
                  resval: Optional[int],
-                 enum: Optional[List[EnumEntry]]):
+                 enum: Optional[List[EnumEntry]],
+                 mubi: bool):
         self.name = name
         self.desc = desc
         self.tags = tags
         self.swaccess = swaccess
         self.hwaccess = hwaccess
+        self.hwqe = hwqe
         self.bits = bits
         self.resval = resval
         self.enum = enum
+        self.mubi = mubi
 
     @staticmethod
     def from_raw(reg_name: str,
@@ -78,6 +88,7 @@ class Field:
                  reg_width: int,
                  params: ReggenParams,
                  hwext: bool,
+                 default_hwqe: bool,
                  shadowed: bool,
                  raw: object) -> 'Field':
         where = 'field {} of {} register'.format(field_idx, reg_name)
@@ -115,6 +126,9 @@ class Field:
             hwaccess = HWAccess(where, raw_hwaccess)
         else:
             hwaccess = default_hwaccess
+
+        raw_hwqe = rd.get('hwqe', default_hwqe)
+        hwqe = check_bool(raw_hwqe, 'hwqe field for {}'.format(where))
 
         raw_mubi = rd.get('mubi', False)
         is_mubi = check_bool(raw_mubi, 'mubi field for {}'.format(where))
@@ -204,13 +218,13 @@ class Field:
                 enum.append(entry)
                 enum_val_to_name[entry.value] = entry.name
 
-        return Field(name, desc, tags, swaccess, hwaccess, bits, resval, enum)
+        return Field(name, desc, tags, swaccess, hwaccess, hwqe, bits, resval, enum, is_mubi)
 
     def has_incomplete_enum(self) -> bool:
         return (self.enum is not None and
                 len(self.enum) != 1 + self.bits.max_value())
 
-    def get_n_bits(self, hwext: bool, hwqe: bool, hwre: bool, bittype: List[str]) -> int:
+    def get_n_bits(self, hwext: bool, hwre: bool, bittype: List[str]) -> int:
         '''Get the size of this field in bits
 
         bittype should be a list of the types of signals to count. The elements
@@ -233,7 +247,7 @@ class Field:
         if "d" in bittype and self.hwaccess.allows_write():
             n_bits += self.bits.width()
         if "qe" in bittype and self.hwaccess.allows_read():
-            n_bits += int(hwqe)
+            n_bits += int(self.hwqe)
         if "re" in bittype and self.hwaccess.allows_read():
             n_bits += int(hwre)
         if "de" in bittype and self.hwaccess.allows_write():
@@ -276,8 +290,8 @@ class Field:
                     else self.bits.make_translated(bit_offset))
 
             ret.append(Field(name, desc,
-                             self.tags, self.swaccess, self.hwaccess,
-                             bits, self.resval, enum))
+                             self.tags, self.swaccess, self.hwaccess, self.hwqe,
+                             bits, self.resval, enum, self.mubi))
 
         return ret
 
@@ -290,8 +304,8 @@ class Field:
         enum = None if stripped else self.enum
 
         return Field(self.name + suffix,
-                     desc, self.tags, self.swaccess, self.hwaccess,
-                     self.bits, self.resval, enum)
+                     desc, self.tags, self.swaccess, self.hwaccess, self.hwqe,
+                     self.bits, self.resval, enum, self.mubi)
 
     def _asdict(self) -> Dict[str, object]:
         rd = {

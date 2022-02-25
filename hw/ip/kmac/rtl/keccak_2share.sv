@@ -6,7 +6,9 @@
 // It supports Keccak with up to 1600b of state
 // Only when EnMasking is enabled, rand_i and sel_i are used
 `include "prim_assert.sv"
-module keccak_2share #(
+module keccak_2share
+  import prim_mubi_pkg::*;
+#(
   parameter int Width = 1600, // b= {25, 50, 100, 200, 400, 800, 1600}
 
   // Derived
@@ -25,7 +27,7 @@ module keccak_2share #(
   input        [RndW-1:0]  rnd_i,   // Current Round
   input                    rand_valid_i,
   input        [Width-1:0] rand_i,  // Random values. Used when 2Share enabled
-  input                    sel_i,   // Select input/output mux. Used when EnMasking := 1
+  input mubi4_t            sel_i,   // Select input/output mux. Used when EnMasking := 1
   input        [Width-1:0] s_i      [Share],
   output logic [Width-1:0] s_o      [Share]
 );
@@ -64,7 +66,7 @@ module keccak_2share #(
   if (!EnMasking) begin : gen_tie_unused
     logic unused_clk, unused_rst_n, unused_rand_valid;
     logic [Width-1:0] unused_rand_data;
-    logic unused_sel;
+    mubi4_t unused_sel;
     assign unused_clk = clk_i;
     assign unused_rst_n = rst_ni;
     assign unused_rand_valid = rand_valid_i;
@@ -92,13 +94,13 @@ module keccak_2share #(
   end : g_state_inout
 
   if (EnMasking) begin : g_2share_data
-    assign phase1_in = (sel_i == 1'b 0) ? state_in : '{default:'0};
-    assign phase2_in = (sel_i == 1'b 1) ? state_in : '{default:'0};
+    assign phase1_in = (mubi4_test_false_strict(sel_i)) ? state_in : '{default:'0};
+    assign phase2_in = (mubi4_test_true_strict(sel_i)) ? state_in : '{default:'0};
 
     always_comb begin
       unique case (sel_i)
-        1'b 0:  state_out = phase1_out;
-        1'b 1:  state_out = phase2_out;
+        MuBi4False:  state_out = phase1_out;
+        MuBi4True:  state_out = phase2_out;
         default: state_out = '{default: '0};
       endcase
     end
@@ -153,7 +155,7 @@ module keccak_2share #(
       assign sheet1[0] = phase2_in[0][X2];
       assign sheet1[1] = phase2_in[1][X2];
 
-      logic [$bits(sheet_t)-1:0] a0, a1, b0, b1, c0, c1, q0, q1;
+      logic [$bits(sheet_t)-1:0] a0, a1, b0, b1, c, q0, q1;
 
       // Convert sheet_t to 1D array
       // TODO: Make this smarter :)
@@ -165,17 +167,11 @@ module keccak_2share #(
 
       // This keccak_f implementation doesn't use the states as entropy sources.
       // It rather receives the entropy from random number generator.
-      // The module needs 1600b of entropy per round (3 cycles). It is expensive
-      // to make 1600b entropy in every three cycles.
-      //
-      // It is recommended to duplicates smaller size of entropy but expands to
-      // 1600b by not concatenating but shuffling.
-      assign c0 = rand_i[x*$bits(sheet_t)+:$bits(sheet_t)];
-      assign c1 = rand_i[x*$bits(sheet_t)+:$bits(sheet_t)];
+      // The module needs 1600b of entropy per round (3 cycles).
+      assign c = rand_i[x*$bits(sheet_t)+:$bits(sheet_t)];
 
       prim_dom_and_2share #(
-        .DW ($bits(sheet_t)), // sheet
-        .EnNegedge(0)         // takes two cycle to complete DOM
+        .DW ($bits(sheet_t)) // sheet
       ) u_dom (
         .clk_i,
         .rst_ni,
@@ -184,9 +180,8 @@ module keccak_2share #(
         .a1_i      (a1),
         .b0_i      (b0),
         .b1_i      (b1),
-        .c_valid_i (rand_valid_i),
-        .c0_i      (c0),
-        .c1_i      (c1),
+        .z_valid_i (rand_valid_i),
+        .z_i       (c),
         .q0_o      (q0),
         .q1_o      (q1)
       );
@@ -255,7 +250,8 @@ module keccak_2share #(
 
   // sel_i shall stay for two cycle after change to 1.
   if (EnMasking) begin : gen_selperiod_chk
-    `ASSUME(SelStayTwoCycleIf1_A, $rose(sel_i) |=> sel_i, clk_i, !rst_ni)
+    `ASSUME(SelStayTwoCycleIfTrue_A, $past(sel_i)==MuBi4False && (sel_i==MuBi4True)
+       |=> sel_i == MuBi4True, clk_i, !rst_ni)
   end
 
   ///////////////

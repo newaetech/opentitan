@@ -11,11 +11,11 @@ module aes
   import aes_reg_pkg::*;
 #(
   parameter bit          AES192Enable          = 1, // Can be 0 (disable), or 1 (enable).
-  parameter bit          Masking               = 1, // Can be 0 (no masking), or
+  parameter bit          SecMasking            = 1, // Can be 0 (no masking), or
                                                     // 1 (first-order masking) of the cipher
                                                     // core. Masking requires the use of a
-                                                    // masked S-Box, see SBoxImpl parameter.
-  parameter sbox_impl_e  SBoxImpl              = SBoxImplDom, // See aes_pkg.sv
+                                                    // masked S-Box, see SecSBoxImpl parameter.
+  parameter sbox_impl_e  SecSBoxImpl           = SBoxImplDom, // See aes_pkg.sv
   parameter int unsigned SecStartTriggerDelay  = 0, // Manual start trigger delay, useful for
                                                     // SCA measurements. A value of e.g. 40
                                                     // allows the processor to go into sleep
@@ -79,6 +79,7 @@ module aes
   logic                      unused_edn_fips;
   logic                      entropy_clearing_req, entropy_masking_req;
   logic                      entropy_clearing_ack, entropy_masking_ack;
+  logic                      edn_req_chk;
 
   ////////////
   // Inputs //
@@ -87,7 +88,6 @@ module aes
   // SEC_CM: AUX.CONFIG.SHADOW
   // SEC_CM: AUX.CONFIG.REGWEN
   // SEC_CM: KEY.SW_UNREADABLE
-  // SEC_CM: IV.CONFIG.SW_UNREADABLE
   // SEC_CM: DATA_REG.SW_UNREADABLE
   // Register interface
   logic intg_err_alert;
@@ -114,23 +114,27 @@ module aes
     .lc_en_o ( {lc_escalate_en} )
   );
 
+  // Upon escalation or detection of a fatal alert, an EDN request signal can be dropped before
+  // getting acknowledged. This is okay as the module will need to be reset anyway.
+  assign edn_req_chk = (lc_escalate_en[0] == lc_ctrl_pkg::Off) & ~alert[1];
+
   // Synchronize EDN interface
   prim_sync_reqack_data #(
     .Width(EntropyWidth),
     .DataSrc2Dst(1'b0),
     .DataReg(1'b0)
   ) u_prim_sync_reqack_data (
-    .clk_src_i  ( clk_i                                 ),
-    .rst_src_ni ( rst_ni                                ),
-    .clk_dst_i  ( clk_edn_i                             ),
-    .rst_dst_ni ( rst_edn_ni                            ),
-    .req_chk_i  ( lc_escalate_en[0] == lc_ctrl_pkg::Off ),
-    .src_req_i  ( edn_req                               ),
-    .src_ack_o  ( edn_ack                               ),
-    .dst_req_o  ( edn_o.edn_req                         ),
-    .dst_ack_i  ( edn_i.edn_ack                         ),
-    .data_i     ( edn_i.edn_bus                         ),
-    .data_o     ( edn_data                              )
+    .clk_src_i  ( clk_i         ),
+    .rst_src_ni ( rst_ni        ),
+    .clk_dst_i  ( clk_edn_i     ),
+    .rst_dst_ni ( rst_edn_ni    ),
+    .req_chk_i  ( edn_req_chk   ),
+    .src_req_i  ( edn_req       ),
+    .src_ack_o  ( edn_ack       ),
+    .dst_req_o  ( edn_o.edn_req ),
+    .dst_ack_i  ( edn_i.edn_ack ),
+    .data_i     ( edn_i.edn_bus ),
+    .data_o     ( edn_data      )
   );
   // We don't track whether the entropy is pre-FIPS or not inside AES.
   assign unused_edn_fips = edn_i.edn_fips;
@@ -154,8 +158,8 @@ module aes
   // AES core
   aes_core #(
     .AES192Enable             ( AES192Enable             ),
-    .Masking                  ( Masking                  ),
-    .SBoxImpl                 ( SBoxImpl                 ),
+    .SecMasking               ( SecMasking               ),
+    .SecSBoxImpl              ( SecSBoxImpl              ),
     .SecStartTriggerDelay     ( SecStartTriggerDelay     ),
     .SecAllowForcingMasks     ( SecAllowForcingMasks     ),
     .SecSkipPRNGReseeding     ( SecSkipPRNGReseeding     ),
@@ -229,7 +233,6 @@ module aes
   `ASSERT_KNOWN(EdnReqKnown, edn_o)
   `ASSERT_KNOWN(AlertTxKnown, alert_tx_o)
 
-`ifndef SYNTHESIS
   // Alert assertions for sparse FSMs.
   for (genvar i = 0; i < Sp2VWidth; i++) begin : gen_control_fsm_svas
     if (SP2V_LOGIC_HIGH[i] == 1'b1) begin : gen_control_fsm_svas_p
@@ -272,6 +275,4 @@ module aes
           alert_tx_o[1])
     end
   end
-`endif
-
 endmodule

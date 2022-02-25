@@ -7,7 +7,7 @@
 package otp_ctrl_reg_pkg;
 
   // Param list
-  parameter int NumSramKeyReqSlots = 2;
+  parameter int NumSramKeyReqSlots = 3;
   parameter int OtpByteAddrWidth = 11;
   parameter int NumErrorEntries = 10;
   parameter int NumDaiWords = 2;
@@ -63,6 +63,8 @@ package otp_ctrl_reg_pkg;
   parameter int RomAlertTimeoutCyclesSize = 16;
   parameter int RomAlertPhaseCyclesOffset = 1300;
   parameter int RomAlertPhaseCyclesSize = 64;
+  parameter int RomWatchdogBiteThresholdCyclesOffset = 1364;
+  parameter int RomWatchdogBiteThresholdCyclesSize = 4;
   parameter int OwnerSwCfgDigestOffset = 1656;
   parameter int OwnerSwCfgDigestSize = 8;
   parameter int HwCfgOffset = 1664;

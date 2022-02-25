@@ -17,6 +17,9 @@ class kmac_smoke_vseq extends kmac_base_vseq;
 
   rand kmac_app_e app_mode;
 
+  // Set this bit to one if entropy fetched successfully without timeout error.
+  bit entropy_fetched;
+
   constraint num_trans_c {
     num_trans inside {[1:200]};
     if (cfg.smoke_test) {
@@ -112,8 +115,17 @@ class kmac_smoke_vseq extends kmac_base_vseq;
       kmac_init();
       `uvm_info(`gfn, "kmac_init done", UVM_HIGH)
 
+      if (cfg.enable_masking && kmac_err_type == kmac_pkg::ErrWaitTimerExpired &&
+          entropy_mode == EntropyModeEdn) begin
+        if (entropy_fetched == 0) check_err();
+      end else if (cfg.enable_masking && entropy_mode == EntropyModeEdn) begin
+        entropy_fetched = 1;
+      end
+
       if (cfg.enable_masking && kmac_err_type == kmac_pkg::ErrIncorrectEntropyMode) begin
-        check_err();
+        if (!entropy_fetched) check_err();
+      end else if (cfg.enable_masking) begin
+        entropy_fetched = 1;
       end
 
       set_prefix();
@@ -123,8 +135,8 @@ class kmac_smoke_vseq extends kmac_base_vseq;
         if (en_sideload || provide_sideload_key) begin
           `uvm_create_on(sideload_seq, p_sequencer.key_sideload_sequencer_h);
           `DV_CHECK_RANDOMIZE_WITH_FATAL(sideload_seq,
-                                         sideload_key.valid == kmac_err_type !=
-                                         kmac_pkg::ErrKeyNotValid;)
+                                         sideload_key.valid ==
+                                         (kmac_err_type != kmac_pkg::ErrKeyNotValid);)
           `uvm_send(sideload_seq)
         end
         // write the SW key to the CSRs
@@ -141,7 +153,11 @@ class kmac_smoke_vseq extends kmac_base_vseq;
       // Only send a KMAC_APP request when in KMAC mode
       if (en_app) begin
         bit process_key_err_before_app_done = $urandom_range(0, 1);
-        `uvm_info(`gfn, $sformatf("process_key_err_before_app_done: %0b", process_key_err_before_app_done), UVM_HIGH)
+        // Inject error might be disabled by the `send_kmac_req` thread.
+        bit error_injected = 0;
+
+        `uvm_info(`gfn, $sformatf("process_key_err_before_app_done: %0b",
+                  process_key_err_before_app_done), UVM_HIGH)
         fork
           // This thread carries out the "normal" functionality by initiating data transfer
           // over the application interface to the KMAC.
@@ -168,6 +184,7 @@ class kmac_smoke_vseq extends kmac_base_vseq;
                       .data(rand_data),
                       .mask(get_rand_contiguous_mask()),
                       .blocking(1));
+            error_injected = 1;
           end : invalid_msgfifo_wr
 
           // This thread will create an error case by writing a SW command to the KMAC
@@ -180,6 +197,7 @@ class kmac_smoke_vseq extends kmac_base_vseq;
             wait (cfg.m_kmac_app_agent_cfg[app_mode].vif.kmac_data_req.valid);
             cfg.clk_rst_vif.wait_clks($urandom_range(25, 250));
             issue_cmd(invalid_cmd);
+            error_injected = 1;
           end : sw_cmd_in_app
 
           // This thread will create an error case by checking that an invalid key has been
@@ -195,6 +213,7 @@ class kmac_smoke_vseq extends kmac_base_vseq;
               read_digest_chunk(KMAC_STATE_SHARE1_BASE, keccak_block_size, share1);
               csr_utils_pkg::wait_no_outstanding_access();
             end
+            error_injected = 1;
           end : check_invalid_key_err
         join
         if (kmac_err_type != kmac_pkg::ErrNone && process_key_err_before_app_done) begin
@@ -206,7 +225,8 @@ class kmac_smoke_vseq extends kmac_base_vseq;
           `uvm_info(`gfn, "finished waiting for kmac_app operation", UVM_HIGH)
 
           if (kmac_err_type inside
-              {kmac_pkg::ErrSwPushedMsgFifo, kmac_pkg::ErrSwIssuedCmdInAppActive}) begin
+              {kmac_pkg::ErrSwPushedMsgFifo, kmac_pkg::ErrSwIssuedCmdInAppActive} &&
+              error_injected) begin
             check_err();
             csr_utils_pkg::wait_no_outstanding_access();
           end

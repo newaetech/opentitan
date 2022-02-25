@@ -55,15 +55,15 @@ package adc_ctrl_env_pkg;
 
   // Type of test we are executing
   typedef enum {
-    AdcCtrlOnehot,
+    AdcCtrlOneShot,
     AdcCtrlNormal,
     AdcCtrlLowpower
   } adc_ctrl_testmode_e;
 
   // Filter condition coding
   typedef enum bit {
-    ADC_CTRL_FILTER_OUT = 0,
-    ADC_CTRL_FILTER_IN  = 1
+    ADC_CTRL_FILTER_IN  = 0,
+    ADC_CTRL_FILTER_OUT = 1
   } adc_ctrl_filter_cond_e;
 
   // Filter configurration

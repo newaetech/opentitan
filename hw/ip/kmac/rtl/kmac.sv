@@ -30,6 +30,10 @@ module kmac
   parameter bit SecIdleAcceptSwMsg = 1'b0,
 
   parameter lfsr_perm_t RndCnstLfsrPerm = RndCnstLfsrPermDefault,
+  parameter lfsr_seed_t RndCnstLfsrSeed = RndCnstLfsrSeedDefault,
+  parameter msg_perm_t  RndCnstMsgPerm  = RndCnstMsgPermDefault,
+
+  parameter storage_perm_t RndCnstStoragePerm = RndCnstStoragePermDefault,
 
   parameter logic [NumAlerts-1:0] AlertAsyncOn = {NumAlerts{1'b1}}
 ) (
@@ -182,7 +186,7 @@ module kmac
 
   // state is de-muxed in keymgr interface logic.
   // the output from keymgr logic goes into staterd module to be visible to SW
-  logic unused_reg_state_valid;
+  logic reg_state_valid;
   logic [sha3_pkg::StateW-1:0] reg_state [Share];
 
   // SHA3 Entropy interface
@@ -232,6 +236,7 @@ module kmac
   // KMAC to SHA3 core
   logic                          msg_valid       ;
   logic [kmac_pkg::MsgWidth-1:0] msg_data [Share];
+  logic [kmac_pkg::MsgWidth-1:0] msg_data_masked [Share];
   logic [kmac_pkg::MsgStrbW-1:0] msg_strb        ;
   logic                          msg_ready       ;
 
@@ -283,6 +288,10 @@ module kmac
   entropy_mode_e entropy_mode;
   logic entropy_fast_process;
 
+  // Message Masking
+  logic msg_mask_en, cfg_msg_mask;
+  logic [MsgWidth-1:0] msg_mask;
+
   // SHA3 Error response
   sha3_pkg::err_t sha3_err;
 
@@ -301,7 +310,9 @@ module kmac
   logic alert_intg_err;
 
   // Life cycle
-  lc_ctrl_pkg::lc_tx_t  lc_escalate_en_sync, lc_escalate_en;
+  localparam int unsigned NumLcSyncCopies = 6;
+  lc_ctrl_pkg::lc_tx_t [NumLcSyncCopies-1:0] lc_escalate_en_sync;
+  lc_ctrl_pkg::lc_tx_t [NumLcSyncCopies-1:0] lc_escalate_en;
 
   //////////////////////////////////////
   // Connecting Register IF to logics //
@@ -313,6 +324,9 @@ module kmac
       reg_ns_prefix[32*i+:32] = reg2hw.prefix[i].q;
     end
   end
+
+  // Create a lint error to reduce the risk of accidentally enabling this feature.
+  `ASSERT_STATIC_LINT_ERROR(KmacSecCmdDelayNonDefault, SecCmdDelay == 0)
 
   if (SecCmdDelay > 0) begin : gen_cmd_delay_buf
     // Delay and buffer commands for SCA measurements.
@@ -379,10 +393,6 @@ module kmac
       end
     end
 
-    // Create a lint error to reduce the risk of accidentally enabling this feature.
-    logic sec_cmd_delay_dummy;
-    assign sec_cmd_delay_dummy = cmd_update;
-
   end else begin : gen_no_cmd_delay_buf
     // Directly forward signals from register IF.
     assign cmd_update = reg2hw.cmd.cmd.qe;
@@ -444,11 +454,13 @@ module kmac
   logic engine_stable;
   assign engine_stable = sha3_fsm == sha3_pkg::StIdle;
 
+  // SEC_CM: CFG_SHADOWED.CONFIG.REGWEN
   assign hw2reg.cfg_regwen.d = engine_stable;
 
   // Secret Key
   // Secret key is defined as external register. So the logic latches when SW
   // writes to KEY_SHARE0 , KEY_SHARE1 registers.
+  // SEC_CM: SW_KEY.KEY.MASKING
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       sw_key_data[0] <= '0;
@@ -504,6 +516,10 @@ module kmac
                        & reg2hw.cfg_shadowed.entropy_ready.qe;
   assign entropy_mode  = entropy_mode_e'(reg2hw.cfg_shadowed.entropy_mode.q);
   assign entropy_fast_process = reg2hw.cfg_shadowed.entropy_fast_process.q;
+
+  // msg_mask_en turns on the message LFSR when KMAC is enabled.
+  assign cfg_msg_mask = reg2hw.cfg_shadowed.msg_mask.q;
+  assign msg_mask_en = cfg_msg_mask & msg_valid & msg_ready;
 
   `ASSERT(EntropyReadyLatched_A, $rose(entropy_ready) |=> !entropy_ready)
 
@@ -619,7 +635,9 @@ module kmac
 
   // Counter errors
   logic counter_error, sha3_count_error, key_index_error;
+  logic kmac_entropy_hash_counter_error;
   assign counter_error = sha3_count_error
+                       | kmac_entropy_hash_counter_error
                        | key_index_error;
 
   // State Errors
@@ -743,7 +761,7 @@ module kmac
 
     // Unconditionally jump into the terminal error state
     // if the life cycle controller triggers an escalation.
-    if (lc_escalate_en != lc_ctrl_pkg::Off) begin
+    if (lc_escalate_en[0] != lc_ctrl_pkg::Off) begin
       kmac_st_d = KmacTerminalError;
     end
   end
@@ -788,7 +806,7 @@ module kmac
     .process_o (kmac2sha3_process   ),
 
     // LC escalation
-    .lc_escalate_en_i (lc_escalate_en),
+    .lc_escalate_en_i (lc_escalate_en[1]),
 
     // Error detection
     .sparse_fsm_error_o (kmac_core_state_error),
@@ -796,6 +814,30 @@ module kmac
   );
 
   // SHA3 hashing engine
+
+  // msg_data masking
+  if (EnMasking == 1) begin: g_msg_mask
+    logic [MsgWidth-1:0] msg_mask_permuted;
+
+    // Permute the LFSR output to avoid same lfsr applied to multiple times
+    always_comb begin
+      msg_mask_permuted = '0;
+      for (int unsigned i = 0 ; i < MsgWidth ; i++) begin
+        // Loop through the MsgPerm constant and swap between the bits
+        msg_mask_permuted[i] = msg_mask[RndCnstMsgPerm[i]];
+      end
+    end
+
+    for (genvar i = 0 ; i < Share ; i++) begin: g_msg_data_mask
+      assign msg_data_masked[i] = msg_data[i]
+                                ^ ({MsgWidth{cfg_msg_mask}} & msg_mask_permuted);
+    end : g_msg_data_mask
+  end else begin : g_no_msg_mask
+    assign msg_data_masked[0] = msg_data[0];
+
+    logic unused_msgmask;
+    assign unused_msgmask = ^{msg_mask, cfg_msg_mask, msg_mask_en};
+  end
   sha3 #(
     .EnMasking (EnMasking),
     .ReuseShare (ReuseShare)
@@ -805,7 +847,7 @@ module kmac
 
     // MSG_FIFO interface (or from KMAC)
     .msg_valid_i (msg_valid),
-    .msg_data_i  (msg_data ), // always store to 0 regardless of EnMasking
+    .msg_data_i  (msg_data_masked ),
     .msg_strb_i  (msg_strb ),
     .msg_ready_o (msg_ready),
 
@@ -828,7 +870,7 @@ module kmac
     .done_i     (sha3_done        ),
 
     // LC escalation
-    .lc_escalate_en_i (lc_escalate_en),
+    .lc_escalate_en_i (lc_escalate_en[2]),
 
     .absorbed_o  (sha3_absorbed),
     .squeezing_o (unused_sha3_squeeze),
@@ -954,7 +996,7 @@ module kmac
     .keccak_state_i       (state),
 
     // to STATE TL Window
-    .reg_state_valid_o    (unused_reg_state_valid),
+    .reg_state_valid_o    (reg_state_valid),
     .reg_state_o          (reg_state),
 
     // Configuration: Sideloaded Key
@@ -973,7 +1015,7 @@ module kmac
     .cmd_o    (kmac_cmd),
 
     // LC escalation
-    .lc_escalate_en_i (lc_escalate_en),
+    .lc_escalate_en_i (lc_escalate_en[3]),
 
     // Error report
     .error_o            (app_err),
@@ -1009,6 +1051,13 @@ module kmac
     .process_o (msgfifo2kmac_process)
   );
 
+  logic [sha3_pkg::StateW-1:0] reg_state_tl [Share];
+  always_comb begin
+    for (int i = 0 ; i < Share; i++) begin
+      reg_state_tl[i] = reg_state_valid ? reg_state[i] : 'b0;
+    end
+  end
+
   // State (Digest) reader
   kmac_staterd #(
     .AddrW     (9), // 512B
@@ -1020,7 +1069,7 @@ module kmac
     .tl_i (tl_win_h2d[WinState]),
     .tl_o (tl_win_d2h[WinState]),
 
-    .state_i (reg_state),
+    .state_i (reg_state_tl),
 
     .endian_swap_i (reg2hw.cfg_shadowed.state_endianness.q)
   );
@@ -1049,7 +1098,7 @@ module kmac
     .keccak_done_i  (sha3_block_processed),
 
     // LC escalation
-    .lc_escalate_en_i (lc_escalate_en),
+    .lc_escalate_en_i (lc_escalate_en[4]),
 
     .error_o            (errchecker_err),
     .sparse_fsm_error_o (kmac_errchk_state_error)
@@ -1083,7 +1132,9 @@ module kmac
     );
 
     kmac_entropy #(
-     .RndCnstLfsrPerm(RndCnstLfsrPerm)
+     .RndCnstLfsrPerm(RndCnstLfsrPerm),
+     .RndCnstLfsrSeed(RndCnstLfsrSeed),
+     .RndCnstStoragePerm(RndCnstStoragePerm)
     ) u_entropy (
       .clk_i,
       .rst_ni,
@@ -1111,6 +1162,10 @@ module kmac
       .wait_timer_prescaler_i (wait_timer_prescaler),
       .wait_timer_limit_i     (wait_timer_limit),
 
+      //// Message Masking
+      .msg_mask_en_i (msg_mask_en),
+      .lfsr_data_o   (msg_mask),
+
       //// SW update of seed
       .seed_update_i         (entropy_seed_update),
       .seed_data_i           (entropy_seed_data),
@@ -1122,12 +1177,13 @@ module kmac
       .hash_threshold_i (entropy_hash_threshold),
 
       // LC escalation
-      .lc_escalate_en_i (lc_escalate_en),
+      .lc_escalate_en_i (lc_escalate_en[5]),
 
       // Error
       .err_o              (entropy_err),
       .sparse_fsm_error_o (kmac_entropy_state_error),
       .lfsr_error_o       (kmac_entropy_lfsr_error),
+      .count_error_o      (kmac_entropy_hash_counter_error),
       .err_processed_i    (err_processed)
     );
   end else begin : gen_empty_entropy
@@ -1164,6 +1220,7 @@ module kmac
 
     assign kmac_entropy_state_error = 1'b 0;
     assign kmac_entropy_lfsr_error  = 1'b 0;
+    assign kmac_entropy_hash_counter_error  = 1'b 0;
 
     logic [1:0] unused_entropy_status;
     assign unused_entropy_status = entropy_in_keyblock;
@@ -1186,10 +1243,13 @@ module kmac
 
     .reg2hw,
     .hw2reg,
+
+    // SEC_CM: BUS.INTEGRITY
     .intg_err_o(alert_intg_err),
     .devmode_i (devmode)
   );
 
+  // SEC_CM: CFG_SHADOWED.CONFIG.SHADOW
   assign shadowed_storage_err = |{
       reg2hw.cfg_shadowed.kmac_en.err_storage             ,
       reg2hw.cfg_shadowed.kstrength.err_storage           ,
@@ -1199,6 +1259,7 @@ module kmac
       reg2hw.cfg_shadowed.sideload.err_storage            ,
       reg2hw.cfg_shadowed.entropy_mode.err_storage        ,
       reg2hw.cfg_shadowed.entropy_fast_process.err_storage,
+      reg2hw.cfg_shadowed.msg_mask.err_storage            ,
       reg2hw.cfg_shadowed.entropy_ready.err_storage       ,
       reg2hw.cfg_shadowed.err_processed.err_storage
     };
@@ -1212,6 +1273,7 @@ module kmac
       reg2hw.cfg_shadowed.sideload.err_update             ,
       reg2hw.cfg_shadowed.entropy_mode.err_update         ,
       reg2hw.cfg_shadowed.entropy_fast_process.err_update ,
+      reg2hw.cfg_shadowed.msg_mask.err_update             ,
       reg2hw.cfg_shadowed.entropy_ready.err_update        ,
       reg2hw.cfg_shadowed.err_processed.err_update
     };
@@ -1225,7 +1287,8 @@ module kmac
     reg2hw.cfg_shadowed.state_endianness.qe     ,
     reg2hw.cfg_shadowed.sideload.qe             ,
     reg2hw.cfg_shadowed.entropy_mode.qe         ,
-    reg2hw.cfg_shadowed.entropy_fast_process.qe
+    reg2hw.cfg_shadowed.entropy_fast_process.qe ,
+    reg2hw.cfg_shadowed.msg_mask.qe
     };
 
   // Alerts
@@ -1293,12 +1356,16 @@ module kmac
     end
   end
 
-  assign lc_escalate_en = (alerts_q[1] || (lc_escalate_en_sync == lc_ctrl_pkg::On))
-                          ? lc_ctrl_pkg::On : lc_ctrl_pkg::Off;
+  // SEC_CM: LC_ESCALATE_EN.INTERSIG.MUBI
+  lc_ctrl_pkg::lc_tx_t alert_to_lc_tx;
+  assign alert_to_lc_tx = lc_ctrl_pkg::lc_tx_bool_to_lc_tx(alerts_q[1]);
+  for (genvar i = 0; i < NumLcSyncCopies; i++) begin : gen_or_alert_lc_sync
+      assign lc_escalate_en[i] = lc_ctrl_pkg::lc_tx_or_hi(alert_to_lc_tx, lc_escalate_en_sync[i]);
+  end
 
   // Synchronize life cycle input
   prim_lc_sync #(
-    .NumCopies (1)
+    .NumCopies (NumLcSyncCopies)
   ) u_prim_lc_sync (
     .clk_i,
     .rst_ni,
@@ -1334,6 +1401,7 @@ module kmac
                                          alert_tx_o[1])
   `ASSERT_PRIM_COUNT_ERROR_TRIGGER_ALERT(KeyIndexCountCheck_A, u_kmac_core.u_key_index_count,
                                          alert_tx_o[1])
+
   // Sparse FSM state error
   `ASSERT_PRIM_FSM_ERROR_TRIGGER_ALERT(KmacCoreFsmCheck_A, u_kmac_core.u_state_regs, alert_tx_o[1])
   `ASSERT_PRIM_FSM_ERROR_TRIGGER_ALERT(KmacAppFsmCheck_A, u_app_intf.u_state_regs, alert_tx_o[1])
@@ -1351,5 +1419,8 @@ module kmac
     // Alert assertions for double LFSR.
     `ASSERT_PRIM_DOUBLE_LFSR_ERROR_TRIGGER_ALERT(DoubleLfsrCheck_A,
         gen_entropy.u_entropy.u_lfsr, alert_tx_o[1])
+
+    `ASSERT_PRIM_COUNT_ERROR_TRIGGER_ALERT(HashCountCheck_A, gen_entropy.u_entropy.u_hash_count,
+                                         alert_tx_o[1])
   end
 endmodule

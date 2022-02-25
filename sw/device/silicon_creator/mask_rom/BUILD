@@ -27,6 +27,7 @@ cc_library(
     testonly = True,
     hdrs = ["mock_boot_policy_ptrs.h"],
     deps = [
+        "//sw/device/lib/base/testing:global_mock",
         "//sw/device/silicon_creator/testing:mask_rom_test",
         "@googletest//:gtest",
     ],
@@ -86,10 +87,10 @@ opentitan_binary(
         "//sw/device/lib/base:mmio",
         "//sw/device/lib/crt",
         "//sw/device/lib/runtime:hart",
+        "//sw/device/silicon_creator/lib:cfi",
         "//sw/device/silicon_creator/lib:epmp",
         "//sw/device/silicon_creator/lib:error",
         "//sw/device/silicon_creator/lib:irq_asm",
-        "//sw/device/silicon_creator/lib:log",
         "//sw/device/silicon_creator/lib:shutdown",
         "//sw/device/silicon_creator/lib:sigverify",
         "//sw/device/silicon_creator/lib:sigverify_intf",
@@ -105,6 +106,7 @@ opentitan_binary(
         "//sw/device/silicon_creator/lib/drivers:rnd",
         "//sw/device/silicon_creator/lib/drivers:rstmgr",
         "//sw/device/silicon_creator/lib/drivers:uart",
+        "//sw/device/silicon_creator/lib/drivers:watchdog",
     ],
 )
 
@@ -188,7 +190,10 @@ cc_library(
         "//sw/device/lib/testing/test_rom:bootstrap",
         "//sw/device/silicon_creator/lib:error",
         "//sw/device/silicon_creator/lib:log",
+        "//sw/device/silicon_creator/lib/base:sec_mmio",
         "//sw/device/silicon_creator/lib/drivers:hmac",
+        "//sw/device/silicon_creator/lib/drivers:lifecycle",
+        "//sw/device/silicon_creator/lib/drivers:watchdog",
     ],
 )
 
@@ -222,7 +227,7 @@ cc_library(
         "//sw/device/silicon_creator/lib/drivers:lifecycle",
         "//sw/device/silicon_creator/lib/drivers:otp",
         "//sw/device/silicon_creator/lib/drivers:rnd",
-        "//sw/device/silicon_creator/mask_rom/keys:test_keys",
+        "//sw/device/silicon_creator/mask_rom/keys:test_public_keys",
     ],
 )
 
@@ -248,7 +253,7 @@ cc_test(
         "//sw/device/silicon_creator/lib/drivers:mock_lifecycle",
         "//sw/device/silicon_creator/lib/drivers:mock_otp",
         "//sw/device/silicon_creator/lib/drivers:mock_rnd",
-        "//sw/device/silicon_creator/mask_rom/keys:test_keys",
+        "//sw/device/silicon_creator/mask_rom/keys:test_public_keys",
         "//sw/device/silicon_creator/testing:mask_rom_test",
         "@googletest//:gtest_main",
     ],

@@ -8,7 +8,10 @@
 
 module kmac_entropy
   import kmac_pkg::*; #(
-  parameter lfsr_perm_t RndCnstLfsrPerm = RndCnstLfsrPermDefault
+  parameter lfsr_perm_t RndCnstLfsrPerm = RndCnstLfsrPermDefault,
+  parameter lfsr_seed_t RndCnstLfsrSeed = RndCnstLfsrSeedDefault,
+
+  parameter storage_perm_t RndCnstStoragePerm = RndCnstStoragePermDefault
 ) (
   input clk_i,
   input rst_ni,
@@ -19,9 +22,9 @@ module kmac_entropy
   input  [MsgWidth-1:0] entropy_data_i,
 
   // Entropy to internal
-  output logic                  rand_valid_o,
-  output [sha3_pkg::StateW-1:0] rand_data_o,
-  input                         rand_consumed_i,
+  output logic                        rand_valid_o,
+  output logic [sha3_pkg::StateW-1:0] rand_data_o,
+  input                               rand_consumed_i,
 
   // Status
   input in_keyblock_i,
@@ -36,6 +39,12 @@ module kmac_entropy
   //// turned on, the logic sending garbage value and never de-assert
   //// rand_valid_o unless it is not processing KeyBlock.
   input fast_process_i,
+
+  //// LFSR Enable for Message Masking
+  //// If 1, LFSR advances to create 64-bit PRNG. This input is used to mask
+  //// the message fed into SHA3 (Keccak).
+  input                       msg_mask_en_i,
+  output logic [MsgWidth-1:0] lfsr_data_o,
 
   //// SW update of seed
   input        seed_update_i,
@@ -63,6 +72,7 @@ module kmac_entropy
   output err_t err_o,
   output logic sparse_fsm_error_o,
   output logic lfsr_error_o,
+  output logic count_error_o,
   input        err_processed_i
 );
 
@@ -268,15 +278,29 @@ module kmac_entropy
 
   assign hash_progress_d = in_keyblock_i;
 
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      hash_cnt_o <= '0;
-    end else if (hash_cnt_clr_i || threshold_hit || entropy_refresh_req_i) begin
-      hash_cnt_o <= '0;
-    end else if (hash_progress_q && !hash_progress_d) begin
-      hash_cnt_o <= hash_cnt_o + 1'b 1;
-    end
-  end
+  logic hash_cnt_clr;
+  assign hash_cnt_clr = hash_cnt_clr_i || threshold_hit || entropy_refresh_req_i;
+
+  logic hash_cnt_en;
+  assign hash_cnt_en = hash_progress_q && !hash_progress_d;
+
+  // SEC_CM CTR.REDUN
+  // This primitive is used to place a hardened counter
+  prim_count #(
+    .Width(kmac_reg_pkg::HashCntW),
+    .OutSelDnCnt(1'b0), // 0 selects up count
+    .CntStyle(prim_count_pkg::DupCnt)
+  ) u_hash_count (
+    .clk_i,
+    .rst_ni,
+    .clr_i(hash_cnt_clr),
+    .set_i(1'b0),
+    .set_cnt_i(kmac_reg_pkg::HashCntW'(0)),
+    .en_i(hash_cnt_en),
+    .step_i(kmac_reg_pkg::HashCntW'(1)),
+    .cnt_o(hash_cnt_o),
+    .err_o(count_error_o)
+  );
 
   assign threshold_hit = |hash_threshold_i && (hash_threshold_i <= hash_cnt_o);
 
@@ -294,36 +318,34 @@ module kmac_entropy
   // LFSR =====================================================================
   //// FSM controls the seed enable signal `lfsr_seed_en`.
   //// Seed selection
-  always_comb begin
-    unique case (mode_q)
-      EntropyModeNone: lfsr_seed = '0;
-      EntropyModeEdn:  lfsr_seed = entropy_data_i;
-      EntropyModeSw:   lfsr_seed = seed_data_i;
-      default:         lfsr_seed = '0;
-    endcase
-  end
+  //// Default value to entropy data_i
+  assign lfsr_seed = (mode_q == EntropyModeSw) ? seed_data_i : entropy_data_i ;
   `ASSERT_KNOWN(ModeKnown_A, mode_i)
 
   // We employ two redundant LFSRs to guard against FI attacks.
   // If any of the two is glitched and the two LFSR states do not agree,
-  // the FSM below is moved into a terminal error state.
+  // KMAC reports the fatal error via alert interface.
+  // SEC_CM: PRNG.LFSR.REDUN
   prim_double_lfsr #(
     .LfsrDw(EntropyLfsrW),
     .EntropyDw(EntropyLfsrW),
     .StateOutDw(EntropyLfsrW),
     .StatePermEn(1'b1),
     .StatePerm(RndCnstLfsrPerm),
+    .DefaultSeed(RndCnstLfsrSeed),
     .NonLinearOut(1'b1)
   ) u_lfsr (
     .clk_i,
     .rst_ni,
     .seed_en_i(lfsr_seed_en),
     .seed_i   (lfsr_seed),
-    .lfsr_en_i(lfsr_en),
+    .lfsr_en_i(lfsr_en || msg_mask_en_i ),
     .entropy_i('0),          // Does not use additional entropy while operating
     .state_o  (lfsr_data),   // (partial) LFSR state output StateOutDw
     .err_o    (lfsr_error_o)
   );
+  assign lfsr_data_o = lfsr_data; // For masking the message
+
   // LFSR ---------------------------------------------------------------------
 
   // 320-bit storage ==========================================================
@@ -361,7 +383,21 @@ module kmac_entropy
   // Storage expands to StateW ================================================
   // May adopt fancy shuffling scheme to obsfucate
   // Or, convert the 320bit to sheet then multiply then unroll into 1600bit
-  assign rand_data_o = {EntropyMultiply{entropy_storage}};
+  logic [sha3_pkg::StateW-1:0] rand_data_concat;
+  assign rand_data_concat = {EntropyMultiply{entropy_storage}};
+  // Shuffle the StateW
+  always_comb begin
+    rand_data_o = '0;
+    for (int unsigned i = 0 ; i < sha3_pkg::StateW ; i++) begin
+      rand_data_o[i] = rand_data_concat[RndCnstStoragePerm[i]];
+    end
+  end
+
+  // Check if RndCnstStoragePerm < StateW
+  for (genvar i = 0 ; i < sha3_pkg::StateW; i++) begin : g_storage_perm_check
+    `ASSERT_INIT(RndCnstStoragePermInBound_A,
+      RndCnstStoragePerm[i] < sha3_pkg::StateW)
+  end
 
   // entropy valid
   always_ff @(posedge clk_i or negedge rst_ni) begin
@@ -401,6 +437,7 @@ module kmac_entropy
   );
 
   // State: Next State and Output Logic
+  // SEC_CM: FSM.SPARSE
   always_comb begin
     st_d = StRandReset;
     sparse_fsm_error_o = 1'b 0;

@@ -4,10 +4,13 @@
 
 #include "sw/device/silicon_creator/lib/shutdown.h"
 
+#include <array>
+
 #include "gtest/gtest.h"
 #include "sw/device/lib/base/macros.h"
 #include "sw/device/lib/base/mmio.h"
-#include "sw/device/silicon_creator/lib/base/mock_abs_mmio.h"
+#include "sw/device/lib/base/testing/global_mock.h"
+#include "sw/device/lib/base/testing/mock_abs_mmio.h"
 #include "sw/device/silicon_creator/lib/drivers/lifecycle.h"
 #include "sw/device/silicon_creator/lib/drivers/mock_alert.h"
 #include "sw/device/silicon_creator/lib/drivers/mock_otp.h"
@@ -29,15 +32,11 @@ using ::testing::Return;
 using ::testing::Test;
 
 namespace {
-extern "C" {
-// Dummy out log_printf.
-rom_error_t log_printf(const char *fmt, ...) { return kErrorOk; }
-}  // extern "C"
 
 // TODO(lowRISC/opentitan#7148): Refactor mocks into their own headers.
 namespace internal {
 // Create a mock for shutdown functions.
-class MockShutdown : public ::mask_rom_test::GlobalMock<MockShutdown> {
+class MockShutdown : public ::global_mock::GlobalMock<MockShutdown> {
  public:
   MOCK_METHOD(void, shutdown_report_error, (rom_error_t));
   MOCK_METHOD(void, shutdown_software_escalate, ());
@@ -560,7 +559,7 @@ TEST_F(ShutdownTest, InitializeManufacturing) {
 class ShutdownDeathTest : public ShutdownTest {};
 
 TEST_F(ShutdownDeathTest, InitializeInvalid) {
-  ASSERT_DEATH(
+  EXPECT_DEATH(
       {
         SetupOtpReads();
         shutdown_init(static_cast<lifecycle_state_t>(0));
@@ -599,8 +598,12 @@ TEST_F(ShutdownTest, FlashKill) {
 TEST_F(ShutdownTest, ShutdownIfErrorOk) { SHUTDOWN_IF_ERROR(kErrorOk); }
 
 TEST_F(ShutdownTest, ShutdownIfErrorUnknown) {
-  ExpectFinalize(kErrorUnknown);
-  SHUTDOWN_IF_ERROR(kErrorUnknown);
+  EXPECT_DEATH(
+      {
+        ExpectFinalize(kErrorUnknown);
+        SHUTDOWN_IF_ERROR(kErrorUnknown);
+      },
+      "");
 }
 
 TEST_F(ShutdownTest, SoftwareEscalate) {

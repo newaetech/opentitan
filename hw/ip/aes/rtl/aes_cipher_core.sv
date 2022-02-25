@@ -95,13 +95,13 @@
 module aes_cipher_core import aes_pkg::*;
 #(
   parameter bit          AES192Enable         = 1,
-  parameter bit          Masking              = 1,
-  parameter sbox_impl_e  SBoxImpl             = SBoxImplDom,
+  parameter bit          SecMasking           = 1,
+  parameter sbox_impl_e  SecSBoxImpl          = SBoxImplDom,
   parameter bit          SecAllowForcingMasks = 0,
   parameter bit          SecSkipPRNGReseeding = 0,
   parameter int unsigned EntropyWidth         = edn_pkg::ENDPOINT_BUS_WIDTH,
 
-  localparam int         NumShares            = Masking ? 2 : 1, // derived parameter
+  localparam int         NumShares            = SecMasking ? 2 : 1, // derived parameter
 
   parameter masking_lfsr_seed_t RndCnstMaskingLfsrSeed = RndCnstMaskingLfsrSeedDefault,
   parameter masking_lfsr_perm_t RndCnstMaskingLfsrPerm = RndCnstMaskingLfsrPermDefault
@@ -160,7 +160,6 @@ module aes_cipher_core import aes_pkg::*;
   state_sel_e                         state_sel;
   logic                               state_sel_err;
 
-  ciph_op_e                           op;
   sp2v_e                              sub_bytes_en;
   sp2v_e                              sub_bytes_out_req;
   sp2v_e                              sub_bytes_out_ack;
@@ -242,19 +241,9 @@ module aes_cipher_core import aes_pkg::*;
     end
   end
 
-  // op_i is one-hot encoded. Check the provided value and use the checked version internally.
-
-  // This primitive is used to place a size-only constraint on the
-  // buffers to act as a synthesis optimization barrier.
-  logic [$bits(ciph_op_e)-1:0] op_raw;
-  prim_buf #(
-    .Width($bits(ciph_op_e))
-  ) u_prim_buf_op (
-    .in_i(op_i),
-    .out_o(op_raw)
-  );
-  assign op        = ciph_op_e'(op_raw);
-  assign op_err    = ~(op == CIPH_FWD || op == CIPH_INV);
+  // op_i is one-hot encoded. Check the provided value and trigger an alert upon detecing invalid
+  // encodings.
+  assign op_err    = ~(op_i == CIPH_FWD || op_i == CIPH_INV);
   assign cfg_valid = cfg_valid_i & ~op_err;
 
   //////////
@@ -281,7 +270,7 @@ module aes_cipher_core import aes_pkg::*;
   end
 
   // Masking
-  if (!Masking) begin : gen_no_masks
+  if (!SecMasking) begin : gen_no_masks
     // The masks are ignored anyway, they can be 0.
     assign sb_in_mask  = '0;
     assign prd_masking = '0;
@@ -369,14 +358,14 @@ module aes_cipher_core import aes_pkg::*;
 
   // Cipher data path
   aes_sub_bytes #(
-    .SBoxImpl ( SBoxImpl )
+    .SecSBoxImpl ( SecSBoxImpl )
   ) u_aes_sub_bytes (
     .clk_i     ( clk_i             ),
     .rst_ni    ( rst_ni            ),
     .en_i      ( sub_bytes_en      ),
     .out_req_o ( sub_bytes_out_req ),
     .out_ack_i ( sub_bytes_out_ack ),
-    .op_i      ( op                ),
+    .op_i      ( op_i              ),
     .data_i    ( state_q[0]        ),
     .mask_i    ( sb_in_mask        ),
     .prd_i     ( prd_sub_bytes     ),
@@ -395,13 +384,13 @@ module aes_cipher_core import aes_pkg::*;
     end
 
     aes_shift_rows u_aes_shift_rows (
-      .op_i   ( op                ),
+      .op_i   ( op_i              ),
       .data_i ( shift_rows_in[s]  ),
       .data_o ( shift_rows_out[s] )
     );
 
     aes_mix_columns u_aes_mix_columns (
-      .op_i   ( op                 ),
+      .op_i   ( op_i               ),
       .data_i ( shift_rows_out[s]  ),
       .data_o ( mix_columns_out[s] )
     );
@@ -465,8 +454,8 @@ module aes_cipher_core import aes_pkg::*;
   // Key expand data path
   aes_key_expand #(
     .AES192Enable ( AES192Enable ),
-    .Masking      ( Masking      ),
-    .SBoxImpl     ( SBoxImpl     )
+    .SecMasking   ( SecMasking   ),
+    .SecSBoxImpl  ( SecSBoxImpl  )
   ) u_aes_key_expand (
     .clk_i       ( clk_i              ),
     .rst_ni      ( rst_ni             ),
@@ -519,8 +508,8 @@ module aes_cipher_core import aes_pkg::*;
 
   // Control
   aes_cipher_control #(
-    .Masking  ( Masking  ),
-    .SBoxImpl ( SBoxImpl )
+    .SecMasking  ( SecMasking  ),
+    .SecSBoxImpl ( SecSBoxImpl )
   ) u_aes_cipher_control (
     .clk_i                ( clk_i               ),
     .rst_ni               ( rst_ni              ),
@@ -532,7 +521,7 @@ module aes_cipher_core import aes_pkg::*;
     .out_ready_i          ( out_ready_i         ),
 
     .cfg_valid_i          ( cfg_valid           ),
-    .op_i                 ( op                  ),
+    .op_i                 ( op_i                ),
     .key_len_i            ( key_len_i           ),
     .crypt_i              ( crypt_i             ),
     .crypt_o              ( crypt_o             ),
@@ -591,8 +580,9 @@ module aes_cipher_core import aes_pkg::*;
   // the out_valid_o signal to prevent any data from being released.
 
   aes_sel_buf_chk #(
-    .Num   ( StateSelNum   ),
-    .Width ( StateSelWidth )
+    .Num      ( StateSelNum   ),
+    .Width    ( StateSelWidth ),
+    .EnSecBuf ( 1'b1          )
   ) u_aes_state_sel_buf_chk (
     .clk_i  ( clk_i          ),
     .rst_ni ( rst_ni         ),
@@ -603,8 +593,9 @@ module aes_cipher_core import aes_pkg::*;
   assign state_sel = state_sel_e'(state_sel_raw);
 
   aes_sel_buf_chk #(
-    .Num   ( AddRKSelNum   ),
-    .Width ( AddRKSelWidth )
+    .Num      ( AddRKSelNum   ),
+    .Width    ( AddRKSelWidth ),
+    .EnSecBuf ( 1'b1          )
   ) u_aes_add_rk_sel_buf_chk (
     .clk_i  ( clk_i           ),
     .rst_ni ( rst_ni          ),
@@ -615,8 +606,9 @@ module aes_cipher_core import aes_pkg::*;
   assign add_rk_sel = add_rk_sel_e'(add_rk_sel_raw);
 
   aes_sel_buf_chk #(
-    .Num   ( KeyFullSelNum   ),
-    .Width ( KeyFullSelWidth )
+    .Num      ( KeyFullSelNum   ),
+    .Width    ( KeyFullSelWidth ),
+    .EnSecBuf ( 1'b1            )
   ) u_aes_key_full_sel_buf_chk (
     .clk_i  ( clk_i             ),
     .rst_ni ( rst_ni            ),
@@ -627,8 +619,9 @@ module aes_cipher_core import aes_pkg::*;
   assign key_full_sel = key_full_sel_e'(key_full_sel_raw);
 
   aes_sel_buf_chk #(
-    .Num   ( KeyDecSelNum   ),
-    .Width ( KeyDecSelWidth )
+    .Num      ( KeyDecSelNum   ),
+    .Width    ( KeyDecSelWidth ),
+    .EnSecBuf ( 1'b1           )
   ) u_aes_key_dec_sel_buf_chk (
     .clk_i  ( clk_i            ),
     .rst_ni ( rst_ni           ),
@@ -639,8 +632,9 @@ module aes_cipher_core import aes_pkg::*;
   assign key_dec_sel = key_dec_sel_e'(key_dec_sel_raw);
 
   aes_sel_buf_chk #(
-    .Num   ( KeyWordsSelNum   ),
-    .Width ( KeyWordsSelWidth )
+    .Num      ( KeyWordsSelNum   ),
+    .Width    ( KeyWordsSelWidth ),
+    .EnSecBuf ( 1'b1             )
   ) u_aes_key_words_sel_buf_chk (
     .clk_i  ( clk_i              ),
     .rst_ni ( rst_ni             ),
@@ -651,8 +645,9 @@ module aes_cipher_core import aes_pkg::*;
   assign key_words_sel = key_words_sel_e'(key_words_sel_raw);
 
   aes_sel_buf_chk #(
-    .Num   ( RoundKeySelNum   ),
-    .Width ( RoundKeySelWidth )
+    .Num      ( RoundKeySelNum   ),
+    .Width    ( RoundKeySelWidth ),
+    .EnSecBuf ( 1'b1             )
   ) u_aes_round_key_sel_buf_chk (
     .clk_i  ( clk_i              ),
     .rst_ni ( rst_ni             ),
@@ -692,11 +687,15 @@ module aes_cipher_core import aes_pkg::*;
   assign sp2v_sig[1] = key_full_we_ctrl;
   assign sp2v_sig[2] = key_dec_we_ctrl;
 
+  // All signals inside sp2v_sig are eventually converted to single-rail signals.
+  localparam bit [NumSp2VSig-1:0] Sp2VEnSecBuf = {NumSp2VSig{1'b1}};
+
   // Individually check sparsely encoded signals.
   for (genvar i = 0; i < NumSp2VSig; i++) begin : gen_sel_buf_chk
     aes_sel_buf_chk #(
-      .Num   ( Sp2VNum   ),
-      .Width ( Sp2VWidth )
+      .Num      ( Sp2VNum         ),
+      .Width    ( Sp2VWidth       ),
+      .EnSecBuf ( Sp2VEnSecBuf[i] )
     ) u_aes_sp2v_sig_buf_chk_i (
       .clk_i  ( clk_i               ),
       .rst_ni ( rst_ni              ),
@@ -737,15 +736,18 @@ module aes_cipher_core import aes_pkg::*;
   // Assertions //
   ////////////////
 
+  // Create a lint error to reduce the risk of accidentally disabling the masking.
+  `ASSERT_STATIC_LINT_ERROR(AesSecMaskingNonDefault, SecMasking == 1)
+
   // Cipher core masking requires a masked SBox and vice versa.
   `ASSERT_INIT(AesMaskedCoreAndSBox,
-      (Masking &&
-      (SBoxImpl == SBoxImplCanrightMasked ||
-       SBoxImpl == SBoxImplCanrightMaskedNoreuse ||
-       SBoxImpl == SBoxImplDom)) ||
-      (!Masking &&
-      (SBoxImpl == SBoxImplLut ||
-       SBoxImpl == SBoxImplCanright)))
+      (SecMasking &&
+      (SecSBoxImpl == SBoxImplCanrightMasked ||
+       SecSBoxImpl == SBoxImplCanrightMaskedNoreuse ||
+       SecSBoxImpl == SBoxImplDom)) ||
+      (!SecMasking &&
+      (SecSBoxImpl == SBoxImplLut ||
+       SecSBoxImpl == SBoxImplCanright)))
 
 // the code below is not meant to be synthesized,
 // but it is intended to be used in simulation and FPV

@@ -75,7 +75,7 @@
       uvm_test_seq: flash_ctrl_sw_op_vseq
       reseed: 5
     }
-	{
+    {
       name: flash_ctrl_host_dir_rd
       uvm_test_seq: flash_ctrl_host_dir_rd_vseq
       run_opts: ["+zero_delays=1"]
@@ -83,9 +83,26 @@
     }
     {
       name: flash_ctrl_rd_buff_evict
-      uvm_test_seq: flash_ctrl_rd_buff_evict_vseq      
+      uvm_test_seq: flash_ctrl_rd_buff_evict_vseq
       reseed: 5
     }
+    {
+      name: flash_ctrl_phy_arb
+      uvm_test_seq: flash_ctrl_phy_arb_vseq
+      run_opts: ["+zero_delays=1"]
+      reseed: 20
+    }
+    {
+      name: flash_ctrl_hw_sec_otp
+      uvm_test_seq: flash_ctrl_hw_sec_otp_vseq
+    }
+	{
+      name: flash_ctrl_erase_suspend
+      uvm_test_seq: flash_ctrl_erase_suspend_vseq
+      run_opts: ["+zero_delays=1"]
+      reseed: 5
+    }
+  
   ]
 
   // List of regressions.

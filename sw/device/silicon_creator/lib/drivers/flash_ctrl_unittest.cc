@@ -4,10 +4,12 @@
 
 #include "sw/device/silicon_creator/lib/drivers/flash_ctrl.h"
 
+#include <array>
+
 #include "gtest/gtest.h"
 #include "sw/device/lib/base/multibits.h"
+#include "sw/device/lib/base/testing/mock_abs_mmio.h"
 #include "sw/device/lib/base/testing/mock_mmio_test_utils.h"
-#include "sw/device/silicon_creator/lib/base/mock_abs_mmio.h"
 #include "sw/device/silicon_creator/lib/base/mock_sec_mmio.h"
 #include "sw/device/silicon_creator/lib/drivers/mock_otp.h"
 #include "sw/device/silicon_creator/lib/error.h"

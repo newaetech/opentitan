@@ -105,7 +105,9 @@ Lastly, while the different partitions may be identical in some attributes, they
 *  All types of partitions obey the same program and erase rules :
    * A bit cannot be programmed back to 1 once it has been programmed to 0.
    * Only erase can restore a bit to 1 under normal circumstances.
-*  Data partitions can be directly read by software and other hardware hosts, while information partitions can only be read by the flash controller
+*  All partitions (data and information) can be read, programmed and erased by the flash protocol controller, subject to [memory protection](#memory-protection) and [life cycle qualification](#memory-protection-for-key-manager-and-life-cycle) .
+*  System hosts (processor and other entities) can only directly read the data partition, they do not have any kind of access to information partitions.
+   * System hosts are also not subject to memory protection rules, as those apply to the flash protocol controller only.
 
 For default assumptions of the design, see the [default configuration]({{< relref "#flash-default-configuration" >}}).
 
@@ -217,7 +219,12 @@ Software can then read / program / erase the flash as needed.
 
 When an RMA entry request is received from the life cycle manager, the flash controller waits for any pending flash transaction to complete, then switches priority to the hardware interface.
 The flash controller then initiates RMA entry process and notifies the life cycle controller when it is complete.
-Unlike the seed phase, after the RMA phase, the flash controller does not grant control back to software as the system is expected to reboot after an RMA attempt.
+The RMA entry process wipes out all data, creator, owner and isolated partitions.
+
+After RMA completes, if the host system is still available, the flash protocol controller registers can still be accessed.
+However, flash memory access are not allowed, either directly by the host or indirectly through flash protocol controller initiated transactions.
+It is expected that after an RMA transition, the entire system will be rebooted.
+
 
 #### Initialization
 
@@ -228,7 +235,7 @@ After the scrambling keys are requested, the flash protocol controller reads the
 Once the above steps are completed, the read buffers in the flash physical controller are enabled for operation.
 
 #### RMA Entry
-During RMA entry, the flash controller "wipes" the contents of the following
+During RMA entry, the flash controller "wipes" the contents of the following:
 - Creator partition
 - Owner partition
 - Isolated partition

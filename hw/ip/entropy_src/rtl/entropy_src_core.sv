@@ -62,7 +62,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
   localparam int ObserveFifoDepth = 64;
   localparam int PreCondWidth = 64;
   localparam int Clog2ObserveFifoDepth = $clog2(ObserveFifoDepth);
-  localparam int EsEnableCopies = 40;
+  localparam int EsEnableCopies = 34;
 
   //-----------------------
   // SHA3parameters
@@ -85,7 +85,6 @@ module entropy_src_core import entropy_src_pkg::*; #(
   logic       fw_ov_fifo_rd_pulse;
   logic       fw_ov_fifo_wr_pulse;
   logic       es_enable_pfa;
-  logic       es_enable_early;
 
   logic       fips_enable_pfe;
   logic       fips_enable_pfa;
@@ -140,6 +139,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
   logic                   any_fail_pulse;
   logic                   main_stage_push;
   logic                   bypass_stage_pop;
+  logic                   boot_phase_done;
   logic [HalfRegWidth-1:0] any_fail_count;
   logic                    any_fails_cntr_err;
   logic                    alert_threshold_fail;
@@ -155,8 +155,6 @@ module entropy_src_core import entropy_src_pkg::*; #(
   logic                     extht_active;
   logic                     alert_cntrs_clr;
   logic                     health_test_clr;
-  logic                     health_test_clr_pfe;
-  logic                     health_test_clr_pfa;
   logic                     health_test_done_pulse;
   logic [RngBusWidth-1:0]   health_test_esbus;
   logic                     health_test_esbus_vld;
@@ -167,11 +165,10 @@ module entropy_src_core import entropy_src_pkg::*; #(
   logic                     es_route_to_sw;
   logic                     es_bypass_to_sw;
   logic                     es_bypass_mode;
-  logic                     rst_bypass_mode;
   logic                     rst_alert_cntr;
-  logic                     boot_bypass_disable;
-  logic                     boot_bypass_disable_pfe;
-  logic                     boot_bypass_disable_pfa;
+  logic                     threshold_scope;
+  logic                     threshold_scope_pfe;
+  logic                     threshold_scope_pfa;
   logic                     fips_compliance;
 
   logic [HalfRegWidth-1:0] health_test_fips_window;
@@ -224,7 +221,8 @@ module entropy_src_core import entropy_src_pkg::*; #(
   logic [HalfRegWidth-1:0] adaptp_lo_bypass_threshold_oneway;
   logic                    adaptp_lo_bypass_threshold_wr;
   logic [HalfRegWidth-1:0] adaptp_lo_threshold;
-  logic [HalfRegWidth-1:0] adaptp_event_cnt;
+  logic [HalfRegWidth-1:0] adaptp_hi_event_cnt;
+  logic [HalfRegWidth-1:0] adaptp_lo_event_cnt;
   logic [HalfRegWidth-1:0] adaptp_hi_event_hwm_fips;
   logic [HalfRegWidth-1:0] adaptp_hi_event_hwm_bypass;
   logic [HalfRegWidth-1:0] adaptp_lo_event_hwm_fips;
@@ -374,7 +372,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
   logic                     es_bus_cmp_alert;
   logic                     es_thresh_cfg_alert;
   logic                     es_main_sm_idle;
-  logic [7:0]               es_main_sm_state;
+  logic [8:0]               es_main_sm_state;
   logic                     fifo_write_err_sum;
   logic                     fifo_read_err_sum;
   logic                     fifo_status_err_sum;
@@ -417,7 +415,6 @@ module entropy_src_core import entropy_src_pkg::*; #(
   logic                    unused_sha3_state;
   logic                    unused_entropy_data;
   logic                    unused_fw_ov_rd_data;
-  logic                    unused_health_test_clr_pfe;
 
   prim_mubi_pkg::mubi8_t en_entropy_src_fw_read;
   prim_mubi_pkg::mubi8_t en_entropy_src_fw_over;
@@ -427,7 +424,6 @@ module entropy_src_core import entropy_src_pkg::*; #(
   logic [RngBusWidth-1:0] ht_esbus_dly_q, ht_esbus_dly_d;
   logic        ht_esbus_vld_dly_q, ht_esbus_vld_dly_d;
   logic        ht_esbus_vld_dly2_q, ht_esbus_vld_dly2_d;
-  logic        boot_bypass_q, boot_bypass_d;
   logic        ht_failed_q, ht_failed_d;
   logic        ht_done_pulse_q, ht_done_pulse_d;
   logic                    sha3_msg_rdy_q, sha3_msg_rdy_d;
@@ -438,7 +434,6 @@ module entropy_src_core import entropy_src_pkg::*; #(
 
   always_ff @(posedge clk_i or negedge rst_ni)
     if (!rst_ni) begin
-      boot_bypass_q         <= 1'b1;
       ht_failed_q           <= '0;
       ht_done_pulse_q       <= '0;
       ht_esbus_dly_q        <= '0;
@@ -450,7 +445,6 @@ module entropy_src_core import entropy_src_pkg::*; #(
       es_rdata_capt_q       <= '0;
       es_rdata_capt_vld_q   <= '0;
     end else begin
-      boot_bypass_q         <= boot_bypass_d;
       ht_failed_q           <= ht_failed_d;
       ht_done_pulse_q       <= ht_done_pulse_d;
       ht_esbus_dly_q        <= ht_esbus_dly_d;
@@ -468,13 +462,13 @@ module entropy_src_core import entropy_src_pkg::*; #(
   import prim_mubi_pkg::mubi4_test_false_loose;
   import prim_mubi_pkg::mubi4_test_invalid;
 
-  mubi4_t [4:0] mubi_module_en_fanout;
+  mubi4_t [3:0] mubi_module_en_fanout;
 
   //--------------------------------------------
   // register lock gating
   //--------------------------------------------
 
-  assign es_hw_regwen = reg2hw.sw_regupd.q && mubi4_test_false_loose(mubi_module_en_fanout[4]);
+  assign es_hw_regwen = reg2hw.sw_regupd.q && mubi4_test_false_loose(mubi_module_en_fanout[3]);
   assign hw2reg.regwen.de = 1'b1;
   assign hw2reg.regwen.d = es_hw_regwen;
 
@@ -492,7 +486,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
   assign hw2reg.recov_alert_sts.module_enable_field_alert.d  = es_enable_pfa;
 
   prim_mubi4_sync #(
-    .NumCopies(5),
+    .NumCopies(4),
     .AsyncOn(0)
   ) u_prim_mubi4_sync_entropy_module_en (
     .clk_i,
@@ -552,7 +546,6 @@ module entropy_src_core import entropy_src_pkg::*; #(
     .mubi_o(mubi_entropy_reg_en_fanout)
   );
 
-  assign es_enable_early = mubi4_test_true_strict(mubi_module_en_fanout[2]);
   assign observe_fifo_thresh = reg2hw.observe_fifo_thresh.q;
 
   // SEC_CM: CONFIG.MUBI
@@ -605,7 +598,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
 
   prim_mubi8_sync #(
     .NumCopies(1),
-    .AsyncOn(0)
+    .AsyncOn(1)
   ) u_prim_mubi8_sync_es_fw_over (
     .clk_i,
     .rst_ni,
@@ -734,13 +727,13 @@ module entropy_src_core import entropy_src_pkg::*; #(
 
   // set the err code source bits
   assign hw2reg.err_code.sfifo_esrng_err.d = 1'b1;
-  assign hw2reg.err_code.sfifo_esrng_err.de =  es_enable_q_fo[2] && sfifo_esrng_err_sum;
+  assign hw2reg.err_code.sfifo_esrng_err.de = sfifo_esrng_err_sum;
 
   assign hw2reg.err_code.sfifo_observe_err.d = 1'b1;
-  assign hw2reg.err_code.sfifo_observe_err.de =  es_enable_q_fo[3] && sfifo_observe_err_sum;
+  assign hw2reg.err_code.sfifo_observe_err.de = sfifo_observe_err_sum;
 
   assign hw2reg.err_code.sfifo_esfinal_err.d = 1'b1;
-  assign hw2reg.err_code.sfifo_esfinal_err.de =  es_enable_q_fo[4] && sfifo_esfinal_err_sum;
+  assign hw2reg.err_code.sfifo_esfinal_err.de = sfifo_esfinal_err_sum;
 
   assign hw2reg.err_code.es_ack_sm_err.d = 1'b1;
   assign hw2reg.err_code.es_ack_sm_err.de = es_ack_sm_err_sum;
@@ -754,13 +747,13 @@ module entropy_src_core import entropy_src_pkg::*; #(
 
  // set the err code type bits
   assign hw2reg.err_code.fifo_write_err.d = 1'b1;
-  assign hw2reg.err_code.fifo_write_err.de = es_enable_q_fo[5] && fifo_write_err_sum;
+  assign hw2reg.err_code.fifo_write_err.de = fifo_write_err_sum;
 
   assign hw2reg.err_code.fifo_read_err.d = 1'b1;
-  assign hw2reg.err_code.fifo_read_err.de = es_enable_q_fo[6] && fifo_read_err_sum;
+  assign hw2reg.err_code.fifo_read_err.de = fifo_read_err_sum;
 
   assign hw2reg.err_code.fifo_state_err.d = 1'b1;
-  assign hw2reg.err_code.fifo_state_err.de = es_enable_q_fo[7] && fifo_status_err_sum;
+  assign hw2reg.err_code.fifo_state_err.de = fifo_status_err_sum;
 
   // Error forcing
   for (genvar i = 0; i < 31; i = i+1) begin : gen_err_code_test_bit
@@ -790,12 +783,13 @@ module entropy_src_core import entropy_src_pkg::*; #(
   assign hw2reg.debug_status.sha3_err.d = sha3_err_q;
 
   assign sha3_err_d =
-         es_enable_q_fo[8] ? 1'b0 :
+         es_enable_q_fo[2] ? 1'b0 :
          {|sha3_err} ? 1'b1 :
          sha3_err_q;
 
   // state machine status
   assign hw2reg.debug_status.main_sm_idle.d = es_main_sm_idle;
+  assign hw2reg.debug_status.main_sm_boot_done.d = boot_phase_done;
   assign hw2reg.debug_status.main_sm_state.d = es_main_sm_state;
 
   //--------------------------------------------
@@ -822,11 +816,11 @@ module entropy_src_core import entropy_src_pkg::*; #(
   );
 
   // fifo controls
-  assign sfifo_esrng_push = (es_enable_q_fo[9] && es_rng_src_valid);
+  assign sfifo_esrng_push = (es_enable_q_fo[3] && es_rng_src_valid);
 
-  assign sfifo_esrng_clr  = !es_enable_q_fo[10];
+  assign sfifo_esrng_clr  = !es_enable_q_fo[4];
   assign sfifo_esrng_wdata = es_rng_bus;
-  assign sfifo_esrng_pop = es_enable_q_fo[11] && sfifo_esrng_not_empty;
+  assign sfifo_esrng_pop = es_enable_q_fo[5] && sfifo_esrng_not_empty;
 
   // fifo err
   assign sfifo_esrng_err =
@@ -878,7 +872,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
   );
 
   assign pfifo_esbit_push = rng_bit_en && sfifo_esrng_pop;
-  assign pfifo_esbit_clr = !es_enable_q_fo[12];
+  assign pfifo_esbit_clr = !es_enable_q_fo[6];
   assign pfifo_esbit_pop = rng_bit_en && pfifo_esbit_not_empty && sfifo_esrng_push;
   assign pfifo_esbit_wdata =
          (rng_bit_sel == 2'h0) ? sfifo_esrng_rdata[0] :
@@ -890,34 +884,25 @@ module entropy_src_core import entropy_src_pkg::*; #(
   // select source for health testing
 
   assign health_test_esbus =
-         (es_enable_q_fo[13] && rng_bit_en) ? pfifo_esbit_rdata :
+         (es_enable_q_fo[7] && rng_bit_en) ? pfifo_esbit_rdata :
          sfifo_esrng_rdata;
 
   assign health_test_esbus_vld =
-         (es_enable_q_fo[14] && rng_bit_en) ? pfifo_esbit_pop :
+         (es_enable_q_fo[8] && rng_bit_en) ? pfifo_esbit_pop :
          sfifo_esrng_pop;
 
-  assign ht_esbus_vld_dly_d = es_enable_q_fo[15] && health_test_esbus_vld;
-  assign ht_esbus_dly_d     = es_enable_q_fo[16] ? health_test_esbus : '0;
-  assign ht_esbus_vld_dly2_d = es_enable_q_fo[17] && ht_esbus_vld_dly_q;
+  assign ht_esbus_vld_dly_d = es_enable_q_fo[9] && health_test_esbus_vld;
+  assign ht_esbus_dly_d     = es_enable_q_fo[10] ? health_test_esbus : '0;
+  assign ht_esbus_vld_dly2_d = es_enable_q_fo[11] && ht_esbus_vld_dly_q;
 
-  assign repcnt_active = es_enable_q_fo[18];
-  assign repcnts_active = es_enable_q_fo[19];
-  assign adaptp_active = es_enable_q_fo[20];
-  assign bucket_active = es_enable_q_fo[21];
-  assign markov_active = es_enable_q_fo[22];
-  assign extht_active = es_enable_q_fo[23];
+  assign repcnt_active = es_enable_q_fo[12];
+  assign repcnts_active = es_enable_q_fo[13];
+  assign adaptp_active = es_enable_q_fo[14];
+  assign bucket_active = es_enable_q_fo[15];
+  assign markov_active = es_enable_q_fo[16];
+  assign extht_active = es_enable_q_fo[17];
 
-  // TODO: Remove health_test_clr bit
-  // SEC_CM: CONFIG.MUBI
-  mubi4_t mubi_ht_clr;
-  assign mubi_ht_clr = mubi4_t'(reg2hw.conf.health_test_clr.q);
-  assign health_test_clr_pfe = mubi4_test_true_strict(mubi_ht_clr);
-  assign health_test_clr_pfa = mubi4_test_invalid(mubi_ht_clr);
-  assign hw2reg.recov_alert_sts.health_test_clr_field_alert.de = health_test_clr_pfa;
-  assign hw2reg.recov_alert_sts.health_test_clr_field_alert.d  = health_test_clr_pfa;
-
-  assign health_test_clr = mubi4_test_true_strict(mubi_module_en_fanout[3]) && !es_enable_q_fo[24];
+  assign health_test_clr = mubi4_test_true_strict(mubi_module_en_fanout[2]) && !es_enable_q_fo[18];
 
   assign health_test_fips_window = reg2hw.health_test_windows.fips_window.q;
   assign health_test_bypass_window = reg2hw.health_test_windows.bypass_window.q;
@@ -1306,26 +1291,20 @@ module entropy_src_core import entropy_src_pkg::*; #(
     .mubi_o(mubi_es_type_fanout)
   );
 
-  // TODO: Remove boot_bypass_disable Issue #9853
+  // TODO(#9759): add more description.
   // SEC_CM: CONFIG.MUBI
-  mubi4_t mubi_boot_byp_dis;
-  assign mubi_boot_byp_dis = mubi4_t'(reg2hw.conf.boot_bypass_disable.q);
-  assign boot_bypass_disable_pfe = mubi4_test_true_strict(mubi_boot_byp_dis);
-  assign boot_bypass_disable_pfa = mubi4_test_invalid(mubi_boot_byp_dis);
-  assign hw2reg.recov_alert_sts.boot_bypass_disable_field_alert.de = boot_bypass_disable_pfa;
-  assign hw2reg.recov_alert_sts.boot_bypass_disable_field_alert.d  = boot_bypass_disable_pfa;
+  mubi4_t mubi_thresh_scope;
+  assign mubi_thresh_scope = mubi4_t'(reg2hw.conf.threshold_scope.q);
+  assign threshold_scope_pfe = mubi4_test_true_strict(mubi_thresh_scope);
+  assign threshold_scope_pfa = mubi4_test_invalid(mubi_thresh_scope);
+  assign hw2reg.recov_alert_sts.threshold_scope_field_alert.de = threshold_scope_pfa;
+  assign hw2reg.recov_alert_sts.threshold_scope_field_alert.d  = threshold_scope_pfa;
 
   assign es_route_to_sw = es_route_pfe;
   assign es_bypass_to_sw = es_type_pfe;
-  assign boot_bypass_disable = boot_bypass_disable_pfe;
+  assign threshold_scope = threshold_scope_pfe;
 
-  assign boot_bypass_d =
-         (!es_enable_early) ? 1'b1 :  // special case for reset
-         boot_bypass_disable ? 1'b0 :
-         rst_bypass_mode ? 1'b0 :
-         boot_bypass_q;
-
-  assign es_bypass_mode = boot_bypass_q || es_bypass_to_sw;
+  assign es_bypass_mode = (!fips_enable_pfe) || (es_bypass_to_sw && es_route_to_sw);
 
   // send off to AST RNG for possibly faster entropy generation
   assign rng_fips_o = es_bypass_mode;
@@ -1343,7 +1322,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
     ) u_prim_count_window_cntr (
       .clk_i,
       .rst_ni,
-      .clr_i(!es_enable_q_fo[25] || health_test_clr),
+      .clr_i(!es_enable_q_fo[19] || health_test_clr),
       .set_i(health_test_done_pulse),
       .set_cnt_i(HalfRegWidth'(0)),
       .en_i(health_test_esbus_vld),
@@ -1524,7 +1503,9 @@ module entropy_src_core import entropy_src_pkg::*; #(
     .thresh_hi_i         (adaptp_hi_threshold),
     .thresh_lo_i         (adaptp_lo_threshold),
     .window_wrap_pulse_i (health_test_done_pulse),
-    .test_cnt_o          (adaptp_event_cnt),
+    .threshold_scope_i   (threshold_scope),
+    .test_cnt_hi_o       (adaptp_hi_event_cnt),
+    .test_cnt_lo_o       (adaptp_lo_event_cnt),
     .test_fail_hi_pulse_o(adaptp_hi_fail_pulse),
     .test_fail_lo_pulse_o(adaptp_lo_fail_pulse),
     .count_err_o         (adaptp_cntr_err)
@@ -1539,7 +1520,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
     .rst_ni              (rst_ni),
     .clear_i             (health_test_clr),
     .event_i             (health_test_done_pulse && !es_bypass_mode),
-    .value_i             (adaptp_event_cnt),
+    .value_i             (adaptp_hi_event_cnt),
     .value_o             (adaptp_hi_event_hwm_fips)
   );
 
@@ -1551,7 +1532,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
     .rst_ni              (rst_ni),
     .clear_i             (health_test_clr),
     .event_i             (health_test_done_pulse && es_bypass_mode),
-    .value_i             (adaptp_event_cnt),
+    .value_i             (adaptp_hi_event_cnt),
     .value_o             (adaptp_hi_event_hwm_bypass)
   );
 
@@ -1581,7 +1562,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
     .rst_ni              (rst_ni),
     .clear_i             (health_test_clr),
     .event_i             (health_test_done_pulse && !es_bypass_mode),
-    .value_i             (adaptp_event_cnt),
+    .value_i             (adaptp_lo_event_cnt),
     .value_o             (adaptp_lo_event_hwm_fips)
   );
 
@@ -1593,7 +1574,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
     .rst_ni              (rst_ni),
     .clear_i             (health_test_clr),
     .event_i             (health_test_done_pulse && es_bypass_mode),
-    .value_i             (adaptp_event_cnt),
+    .value_i             (adaptp_lo_event_cnt),
     .value_o             (adaptp_lo_event_hwm_bypass)
   );
 
@@ -1695,6 +1676,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
     .thresh_hi_i         (markov_hi_threshold),
     .thresh_lo_i         (markov_lo_threshold),
     .window_wrap_pulse_i (health_test_done_pulse),
+    .threshold_scope_i   (threshold_scope),
     .test_cnt_hi_o       (markov_hi_event_cnt),
     .test_cnt_lo_o       (markov_lo_event_cnt),
     .test_fail_hi_pulse_o (markov_hi_fail_pulse),
@@ -1914,7 +1896,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
          extht_hi_fail_pulse || extht_lo_fail_pulse;
 
   assign ht_failed_d =
-         (!es_enable_q_fo[26]) ? 1'b0 :
+         (!es_enable_q_fo[20]) ? 1'b0 :
          ht_done_pulse_q ? 1'b0 :
          any_fail_pulse ? 1'b1 :
          ht_failed_q;
@@ -1938,9 +1920,9 @@ module entropy_src_core import entropy_src_pkg::*; #(
 
   assign recov_alert_o =
          es_enable_pfa ||
+         fips_enable_pfa ||
          entropy_data_reg_en_pfa ||
-         boot_bypass_disable_pfa ||
-         health_test_clr_pfa ||
+         threshold_scope_pfa ||
          rng_bit_enable_pfa ||
          fw_ov_mode_pfa ||
          fw_ov_entropy_insert_pfa ||
@@ -2117,7 +2099,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
   assign pfifo_postht_push = ht_esbus_vld_dly_q;
   assign pfifo_postht_wdata = ht_esbus_dly_q;
 
-  assign pfifo_postht_clr = !es_enable_q_fo[27];
+  assign pfifo_postht_clr = !es_enable_q_fo[21];
   assign pfifo_postht_pop = ht_esbus_vld_dly2_q &&
          pfifo_postht_not_empty;
 
@@ -2150,7 +2132,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
   // fifo controls
   assign sfifo_observe_push = fw_ov_mode && pfifo_postht_pop;
 
-  assign sfifo_observe_clr  = !es_enable_q_fo[28];
+  assign sfifo_observe_clr  = !es_enable_q_fo[22];
 
   assign sfifo_observe_wdata = pfifo_postht_rdata;
 
@@ -2195,7 +2177,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
          (fw_ov_entropy_insert ? fw_ov_wr_data : pfifo_postht_rdata) :
          pfifo_postht_rdata;
 
-  assign pfifo_precon_clr = !es_enable_q_fo[29];
+  assign pfifo_precon_clr = !es_enable_q_fo[23];
   assign pfifo_precon_pop = pfifo_precon_not_empty;
 
 
@@ -2218,7 +2200,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
   assign pfifo_cond_not_empty = sha3_state_vld;
   assign sha3_msgfifo_ready = sha3_msg_rdy_q;
 
-  assign sha3_msg_rdy_d = es_enable_q_fo[30] && sha3_msg_rdy;
+  assign sha3_msg_rdy_d = es_enable_q_fo[24] && sha3_msg_rdy;
 
   // SHA3 hashing engine
   sha3 #(
@@ -2295,7 +2277,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
   assign pfifo_bypass_push = pfifo_precon_pop && es_bypass_mode;
   assign pfifo_bypass_wdata = pfifo_precon_rdata;
 
-  assign pfifo_bypass_clr = !es_enable_q_fo[31];
+  assign pfifo_bypass_clr = !es_enable_q_fo[25];
   assign pfifo_bypass_pop = bypass_stage_pop;
 
 
@@ -2313,19 +2295,19 @@ module entropy_src_core import entropy_src_pkg::*; #(
     u_entropy_src_main_sm (
     .clk_i                (clk_i),
     .rst_ni               (rst_ni),
-    .enable_i             (es_enable_q_fo[32]),
+    .enable_i             (es_enable_q_fo[26]),
     .ht_done_pulse_i      (ht_done_pulse_q),
     .ht_fail_pulse_i      (ht_failed_q),
     .alert_thresh_fail_i  (alert_threshold_fail),
     .sfifo_esfinal_full_i (sfifo_esfinal_full),
     .rst_alert_cntr_o     (rst_alert_cntr),
     .bypass_mode_i        (es_bypass_mode),
-    .rst_bypass_mode_o    (rst_bypass_mode),
     .main_stage_rdy_i     (pfifo_cond_not_empty),
     .bypass_stage_rdy_i   (pfifo_bypass_not_empty),
     .sha3_state_vld_i     (sha3_state_vld),
     .main_stage_push_o    (main_stage_push),
     .bypass_stage_pop_o   (bypass_stage_pop),
+    .boot_phase_done_o    (boot_phase_done),
     .sha3_start_o         (sha3_start),
     .sha3_process_o       (sha3_process),
     .sha3_done_o          (sha3_done),
@@ -2364,11 +2346,11 @@ module entropy_src_core import entropy_src_pkg::*; #(
     .depth_o        (sfifo_esfinal_depth)
   );
 
-  assign fips_compliance = !es_bypass_mode && es_enable_q_fo[33] && !rng_bit_en;
+  assign fips_compliance = !es_bypass_mode && es_enable_q_fo[27] && !rng_bit_en;
 
   // fifo controls
   assign sfifo_esfinal_push = sfifo_esfinal_not_full && main_stage_push;
-  assign sfifo_esfinal_clr  = !es_enable_q_fo[34];
+  assign sfifo_esfinal_clr  = !es_enable_q_fo[28];
   assign sfifo_esfinal_wdata = {fips_compliance,final_es_data};
   assign sfifo_esfinal_pop = es_route_to_sw ? pfifo_swread_push :
          es_hw_if_fifo_pop;
@@ -2384,21 +2366,13 @@ module entropy_src_core import entropy_src_pkg::*; #(
   assign es_hw_if_req = entropy_src_hw_if_i.es_req;
   assign entropy_src_hw_if_o.es_ack = es_hw_if_ack;
   assign entropy_src_hw_if_o.es_bits = esfinal_data;
-  // TODO: The following is a placeholder for the final implementation
-  // for blocking non-FIPS data.  Please see PR #9949 & Issue 9853
-  // for details.
-  //
-  // For now data is simply masked if fips_enable is not set
-  // but this does not prevent previously queued seeds from
-  // exiting once FIPS_ENABLE is asserted.
-  assign entropy_src_hw_if_o.es_fips = esfinal_fips_flag
-                                       && fips_enable_pfe; // TODO: Fix fips_enable_pfe
+  assign entropy_src_hw_if_o.es_fips = esfinal_fips_flag;
 
   // SEC_CM: ACK_SM.FSM.SPARSE
   entropy_src_ack_sm u_entropy_src_ack_sm (
     .clk_i            (clk_i),
     .rst_ni           (rst_ni),
-    .enable_i         (es_enable_q_fo[35]),
+    .enable_i         (es_enable_q_fo[29]),
     .req_i            (es_hw_if_req),
     .ack_o            (es_hw_if_ack),
     .fifo_not_empty_i (sfifo_esfinal_not_empty && !es_route_to_sw),
@@ -2422,7 +2396,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
   assign es_rdata_capt_d = es_rdata_capt_vld ? sfifo_esfinal_rdata[63:0] : es_rdata_capt_q;
 
   assign es_rdata_capt_vld_d =
-         !es_enable_q_fo[36] ? 1'b0 :
+         !es_enable_q_fo[30] ? 1'b0 :
          es_rdata_capt_vld ? 1'b1 :
          es_rdata_capt_vld_q;
 
@@ -2455,11 +2429,11 @@ module entropy_src_core import entropy_src_pkg::*; #(
   assign pfifo_swread_push = es_route_to_sw && pfifo_swread_not_full && sfifo_esfinal_not_empty;
   assign pfifo_swread_wdata = esfinal_data;
 
-  assign pfifo_swread_clr = !es_enable_q_fo[37];
-  assign pfifo_swread_pop =  es_enable_q_fo[38] && sw_es_rd_pulse;
+  assign pfifo_swread_clr = !es_enable_q_fo[31];
+  assign pfifo_swread_pop =  es_enable_q_fo[32] && sw_es_rd_pulse;
 
   // set the es entropy to the read reg
-  assign es_data_reg_rd_en = es_enable_q_fo[39] && efuse_es_sw_reg_en && entropy_data_reg_en_pfe;
+  assign es_data_reg_rd_en = es_enable_q_fo[33] && efuse_es_sw_reg_en && entropy_data_reg_en_pfe;
   assign hw2reg.entropy_data.d = es_data_reg_rd_en ? pfifo_swread_rdata : '0;
   assign sw_es_rd_pulse = es_data_reg_rd_en && reg2hw.entropy_data.re;
 
@@ -2467,7 +2441,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
 
   prim_mubi8_sync #(
     .NumCopies(1),
-    .AsyncOn(0)
+    .AsyncOn(1)
   ) u_prim_mubi8_sync_es_fw_read (
     .clk_i,
     .rst_ni,
@@ -2483,7 +2457,6 @@ module entropy_src_core import entropy_src_pkg::*; #(
   assign unused_sha3_state = (|sha3_state[0][sha3_pkg::StateW-1:SeedLen]);
   assign unused_entropy_data = (|reg2hw.entropy_data.q);
   assign unused_fw_ov_rd_data = (|reg2hw.fw_ov_rd_data.q);
-  assign unused_health_test_clr_pfe = health_test_clr_pfe;
 
 
 endmodule

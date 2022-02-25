@@ -73,18 +73,20 @@ module usbdev_usbif  #(
   output logic                     clr_devaddr_o,
   input  logic [NEndpoints-1:0]    in_ep_enabled_i,
   input  logic [NEndpoints-1:0]    out_ep_enabled_i,
-  input  logic [NEndpoints-1:0]    ep_iso_i,
+  input  logic [NEndpoints-1:0]    out_ep_iso_i,
+  input  logic [NEndpoints-1:0]    in_ep_iso_i,
   input  logic                     cfg_eop_single_bit_i, // 1: detect a single SE0 bit as EOP
   input  logic                     cfg_rx_differential_i, // 1: use differential rx data on usb_d_i
   input  logic                     tx_osc_test_mode_i, // Oscillator test mode: constant JK output
   input  logic [NEndpoints-1:0]    data_toggle_clear_i, // Clear the data toggles for an EP
+  input  logic                     resume_link_active_i, // Jump from LinkPowered to LinkResuming
 
   // status
   output logic                     frame_start_o,
   output logic [10:0]              frame_o,
   output logic [2:0]               link_state_o,
   output logic                     link_disconnect_o,
-  output logic                     link_connect_o,
+  output logic                     link_powered_o,
   output logic                     link_reset_o,
   output logic                     link_active_o,
   output logic                     link_suspend_o,
@@ -262,6 +264,7 @@ module usbdev_usbif  #(
 
   logic [10:0]     frame_index_raw;
   logic            rx_jjj_det;
+  logic            rx_j_det;
 
   usb_fs_nb_pe #(
     .NumOutEps      (NEndpoints),
@@ -271,6 +274,7 @@ module usbdev_usbif  #(
     .clk_48mhz_i           (clk_48mhz_i),
     .rst_ni                (rst_ni),
     .link_reset_i          (link_reset),
+    .link_active_i         (link_active_o),
 
     .cfg_eop_single_bit_i  (cfg_eop_single_bit_i),
     .cfg_rx_differential_i (cfg_rx_differential_i),
@@ -299,7 +303,7 @@ module usbdev_usbif  #(
     .out_ep_control_i      (rx_setup_i),
     .out_ep_full_i         (out_ep_full),
     .out_ep_stall_i        (out_ep_stall),
-    .out_ep_iso_i          (ep_iso_i),
+    .out_ep_iso_i          (out_ep_iso_i),
 
     // in endpoint interfaces
     .in_ep_current_o       (in_ep_current),
@@ -313,10 +317,11 @@ module usbdev_usbif  #(
     .in_ep_has_data_i      (in_rdy_i),
     .in_ep_data_i          (in_ep_data),
     .in_ep_data_done_i     (in_ep_data_done),
-    .in_ep_iso_i           (ep_iso_i),
+    .in_ep_iso_i           (in_ep_iso_i),
 
     // rx status
     .rx_jjj_det_o          (rx_jjj_det),
+    .rx_j_det_o            (rx_j_det),
 
     // error signals
     .rx_crc_err_o          (rx_crc_err_o),
@@ -346,6 +351,7 @@ module usbdev_usbif  #(
   end
 
   // Capture frame number (host sends evert 1ms)
+  // TODO(#10678): Handle missing SOF packets
   always_ff @(posedge clk_48mhz_i or negedge rst_ni) begin
     if (!rst_ni) begin
       frame_o <= '0;
@@ -357,23 +363,26 @@ module usbdev_usbif  #(
   end
 
   usbdev_linkstate u_usbdev_linkstate (
-    .clk_48mhz_i       (clk_48mhz_i),
-    .rst_ni            (rst_ni),
-    .us_tick_i         (us_tick),
-    .usb_sense_i       (usb_sense_i),
-    .usb_dp_i          (usb_dp_i),
-    .usb_dn_i          (usb_dn_i),
-    .usb_oe_i          (usb_oe_o),
-    .rx_jjj_det_i      (rx_jjj_det),
-    .sof_valid_i       (sof_valid),
-    .link_disconnect_o (link_disconnect_o),
-    .link_connect_o    (link_connect_o),
-    .link_reset_o      (link_reset),
-    .link_active_o     (link_active_o),
-    .link_suspend_o    (link_suspend_o),
-    .link_resume_o     (link_resume_o),
-    .link_state_o      (link_state_o),
-    .host_lost_o       (host_lost_o)
+    .clk_48mhz_i           (clk_48mhz_i),
+    .rst_ni                (rst_ni),
+    .us_tick_i             (us_tick),
+    .usb_sense_i           (usb_sense_i),
+    .usb_dp_i              (usb_dp_i),
+    .usb_dn_i              (usb_dn_i),
+    .usb_oe_i              (usb_oe_o),
+    .usb_pullup_en_i       (enable_i),
+    .rx_jjj_det_i          (rx_jjj_det),
+    .rx_j_det_i            (rx_j_det),
+    .sof_valid_i           (sof_valid),
+    .resume_link_active_i  (resume_link_active_i),
+    .link_disconnect_o     (link_disconnect_o),
+    .link_powered_o        (link_powered_o),
+    .link_reset_o          (link_reset),
+    .link_active_o         (link_active_o),
+    .link_suspend_o        (link_suspend_o),
+    .link_resume_o         (link_resume_o),
+    .link_state_o          (link_state_o),
+    .host_lost_o           (host_lost_o)
   );
 
   ////////////////

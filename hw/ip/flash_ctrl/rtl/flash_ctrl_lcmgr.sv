@@ -73,6 +73,9 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
   output logic lfsr_en_o,
   input [BusWidth-1:0] rand_i,
 
+  // disable access to flash
+  output lc_ctrl_pkg::lc_tx_t dis_access_o,
+
   // init ongoing
   output logic init_busy_o
 );
@@ -157,6 +160,7 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
   flash_lcmgr_phase_e phase;
   logic seed_phase;
   logic rma_phase;
+  logic seed_err_q, seed_err_d;
 
   assign seed_phase = phase == PhaseSeed;
   assign rma_phase = phase == PhaseRma;
@@ -165,11 +169,15 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
     if (!rst_ni) begin
       rma_ack_q <= lc_ctrl_pkg::Off;
       validate_q <= 1'b0;
+      seed_err_q <= '0;
     end else begin
       rma_ack_q <= rma_ack_d;
       validate_q <= validate_d;
+      seed_err_q <= seed_err_d;
     end
   end
+
+  assign seed_err_o = seed_err_q;
 
   // seed cnt tracks which seed round we are handling at the moment
   always_ff @(posedge clk_i or negedge rst_ni) begin
@@ -331,7 +339,7 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
     num_words = SeedReads[11:0] - 12'd1;
 
     // seed status
-    seed_err_o = 1'b0;
+    seed_err_d = seed_err_q;
 
     state_d = state_q;
     rma_ack_d = lc_ctrl_pkg::Off;
@@ -350,6 +358,9 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
     // rma related
     rma_wipe_req = 1'b0;
     rma_wipe_idx_incr = 1'b0;
+
+    // disable flash access entirely
+    dis_access_o = lc_ctrl_pkg::Off;
 
     state_err = 1'b0;
 
@@ -403,7 +414,7 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
           start = 1'b0;
           state_d = StWait;
         end else if (done_i) begin
-          seed_err_o = |err_i;
+          seed_err_d = |err_i | seed_err_q;
           state_d = StReadEval;
         end
       end // case: StReadSeeds
@@ -457,6 +468,7 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
       // Otherwise assign output to error status;
       StRmaRsp: begin
         phase = PhaseRma;
+        dis_access_o = lc_ctrl_pkg::On;
         if (err_sts_q != lc_ctrl_pkg::On) begin
           state_d = StInvalid;
         end else begin
@@ -465,6 +477,7 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
       end
 
       StInvalid: begin
+        dis_access_o = lc_ctrl_pkg::On;
         state_err = 1'b1;
         // Setting PhaseInvalid causes Vivado to erroneously infer combo loops. For details, see
         // https://github.com/lowRISC/opentitan/issues/10204
@@ -474,6 +487,7 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
 
       // Invalid catch-all state
       default: begin
+        dis_access_o = lc_ctrl_pkg::On;
         state_d = StInvalid;
       end
 
@@ -511,6 +525,7 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
   // flops in order to prevent FSM state encoding optimizations.
   logic [RmaStateWidth-1:0] rma_state_raw_q;
   assign rma_state_q = rma_state_e'(rma_state_raw_q);
+  // SEC_CM: FSM.SPARSE
   prim_sparse_fsm_flop #(
     .StateEnumT(rma_state_e),
     .Width(RmaStateWidth),
@@ -522,6 +537,7 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
     .state_o ( rma_state_raw_q )
   );
 
+  // SEC_CM: CTR.SPARSE
   logic page_err_q, page_err_d;
   prim_count #(
     .Width(PageCntWidth),
@@ -556,24 +572,38 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
     .err_o(word_err_d)
   );
 
+  logic rma_idx_err_q, rma_idx_err_d;
+  prim_count #(
+    .Width(WipeIdxWidth),
+    .OutSelDnCnt(1'b0),
+    .CntStyle(prim_count_pkg::DupCnt)
+  ) u_wipe_idx_cnt (
+    .clk_i,
+    .rst_ni,
+    .clr_i('0),
+    .set_i('0),
+    .set_cnt_i('0),
+    .en_i(rma_wipe_idx_incr),
+    .step_i(WipeIdxWidth'(1'b1)),
+    .cnt_o(rma_wipe_idx),
+    .err_o(rma_idx_err_d)
+  );
+
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       page_err_q <= '0;
       word_err_q <= '0;
+      rma_idx_err_q <= '0;
     end else begin
       page_err_q <= page_err_q | page_err_d;
       word_err_q <= word_err_q | word_err_d;
+      rma_idx_err_q <= rma_idx_err_q | rma_idx_err_d;
     end
   end
 
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      rma_wipe_idx <= '0;
-    end else if (rma_wipe_idx_incr) begin
-      rma_wipe_idx <= rma_wipe_idx + 1'b1;
-    end
-  end
-
+  // beat cnt is not made a prim_count because if beat_cnt
+  // if tampered, the read verification stage will automatically
+  // fail.
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       beat_cnt <= '0;
@@ -644,6 +674,8 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
 
   //fsm for handling the actual wipe
   logic fsm_err;
+
+  // SEC_CM: RMA_ENTRY.MEM.SEC_WIPE
   always_comb begin
     rma_state_d = rma_state_q;
     rma_wipe_done = 1'b0;
@@ -775,7 +807,7 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
   assign rma_ack_o = rma_ack_q;
 
   // all of these are considered fatal errors
-  assign fatal_err_o = page_err_q | word_err_q | fsm_err | state_err;
+  assign fatal_err_o = page_err_q | word_err_q | fsm_err | state_err | rma_idx_err_q;
 
   logic unused_seed_valid;
   assign unused_seed_valid = otp_key_rsp_i.seed_valid;
@@ -783,12 +815,14 @@ module flash_ctrl_lcmgr import flash_ctrl_pkg::*; #(
   // assertion
 
 `ifdef INC_ASSERT
-  logic [DataWidth-1:0] rma_data;
+  logic [DataWidth-1:0] rma_data_q, rma_data;
   always_ff @(posedge clk_i) begin
     if (rma_start && rvalid_i && rready_o) begin
-      rma_data <= {rma_data[(DataWidth-1) -: BusWidth], rdata_i};
+      rma_data_q <= rma_data;
     end
   end
+
+  assign rma_data = {rdata_i, rma_data_q[DataWidth-1 : BusWidth]};
 
   // check the rma programmed value actually matches what was read back
   `ASSERT(ProgRdVerify_A, rma_start & rd_cnt_en & done_i |-> prog_data == rma_data)

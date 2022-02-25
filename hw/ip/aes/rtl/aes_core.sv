@@ -11,14 +11,14 @@ module aes_core
   import aes_reg_pkg::*;
 #(
   parameter bit          AES192Enable         = 1,
-  parameter bit          Masking              = 1,
-  parameter sbox_impl_e  SBoxImpl             = SBoxImplDom,
+  parameter bit          SecMasking           = 1,
+  parameter sbox_impl_e  SecSBoxImpl          = SBoxImplDom,
   parameter int unsigned SecStartTriggerDelay = 0,
   parameter bit          SecAllowForcingMasks = 0,
   parameter bit          SecSkipPRNGReseeding = 0,
   parameter int unsigned EntropyWidth         = edn_pkg::ENDPOINT_BUS_WIDTH,
 
-  localparam int         NumShares            = Masking ? 2 : 1, // derived parameter
+  localparam int         NumShares            = SecMasking ? 2 : 1, // derived parameter
 
   parameter clearing_lfsr_seed_t RndCnstClearingLfsrSeed  = RndCnstClearingLfsrSeedDefault,
   parameter clearing_lfsr_perm_t RndCnstClearingLfsrPerm  = RndCnstClearingLfsrPermDefault,
@@ -61,6 +61,7 @@ module aes_core
   aes_op_e                                    aes_op_q;
   aes_mode_e                                  aes_mode_q;
   ciph_op_e                                   cipher_op;
+  ciph_op_e                                   cipher_op_buf;
   key_len_e                                   key_len_q;
   logic                                       sideload_q;
   prs_rate_e                                  prng_reseed_rate_q;
@@ -75,6 +76,7 @@ module aes_core
   logic                                       ctrl_alert;
   logic                                       mux_sel_err;
   logic                                       sp_enc_err_d, sp_enc_err_q;
+  logic                                       clear_on_fatal;
 
   logic                       [3:0][3:0][7:0] state_in;
   logic                      [SISelWidth-1:0] state_in_sel_raw;
@@ -94,6 +96,7 @@ module aes_core
 
   logic                [NumRegsKey-1:0][31:0] key_init [NumSharesKey];
   logic                [NumRegsKey-1:0]       key_init_qe [NumSharesKey];
+  logic                [NumRegsKey-1:0]       key_init_qe_buf [NumSharesKey];
   logic                [NumRegsKey-1:0][31:0] key_init_d [NumSharesKey];
   logic                [NumRegsKey-1:0][31:0] key_init_q [NumSharesKey];
   logic                [NumRegsKey-1:0][31:0] key_init_cipher [NumShares];
@@ -107,6 +110,7 @@ module aes_core
 
   logic                 [NumRegsIv-1:0][31:0] iv;
   logic                 [NumRegsIv-1:0]       iv_qe;
+  logic                 [NumRegsIv-1:0]       iv_qe_buf;
   logic  [NumSlicesCtr-1:0][SliceSizeCtr-1:0] iv_d;
   logic  [NumSlicesCtr-1:0][SliceSizeCtr-1:0] iv_q;
   sp2v_e [NumSlicesCtr-1:0]                   iv_we_ctrl;
@@ -133,6 +137,7 @@ module aes_core
 
   logic               [NumRegsData-1:0][31:0] data_in;
   logic               [NumRegsData-1:0]       data_in_qe;
+  logic               [NumRegsData-1:0]       data_in_qe_buf;
   logic                                       data_in_we;
 
   logic                       [3:0][3:0][7:0] add_state_out;
@@ -146,6 +151,7 @@ module aes_core
   sp2v_e                                      data_out_we_ctrl;
   sp2v_e                                      data_out_we;
   logic               [NumRegsData-1:0]       data_out_re;
+  logic               [NumRegsData-1:0]       data_out_re_buf;
 
   sp2v_e                                      cipher_in_valid;
   sp2v_e                                      cipher_in_ready;
@@ -227,6 +233,13 @@ module aes_core
     end
   end
 
+  prim_sec_anchor_buf #(
+    .Width ( NumSharesKey * NumRegsKey )
+  ) u_prim_buf_key_init_qe (
+    .in_i  ( {key_init_qe[1],     key_init_qe[0]}     ),
+    .out_o ( {key_init_qe_buf[1], key_init_qe_buf[0]} )
+  );
+
   always_comb begin : key_sideload_get
     for (int s = 0; s < NumSharesKey; s++) begin
       for (int i = 0; i < NumRegsKey; i++) begin
@@ -242,12 +255,26 @@ module aes_core
     end
   end
 
+  prim_sec_anchor_buf #(
+    .Width ( NumRegsIv )
+  ) u_prim_buf_iv_qe (
+    .in_i  ( iv_qe     ),
+    .out_o ( iv_qe_buf )
+  );
+
   always_comb begin : data_in_get
     for (int i = 0; i < NumRegsData; i++) begin
       data_in[i]    = reg2hw.data_in[i].q;
       data_in_qe[i] = reg2hw.data_in[i].qe;
     end
   end
+
+  prim_sec_anchor_buf #(
+    .Width ( NumRegsData )
+  ) u_prim_buf_data_in_qe (
+    .in_i  ( data_in_qe     ),
+    .out_o ( data_in_qe_buf )
+  );
 
   always_comb begin : data_out_get
     for (int i = 0; i < NumRegsData; i++) begin
@@ -256,6 +283,13 @@ module aes_core
       data_out_re[i]       = reg2hw.data_out[i].re;
     end
   end
+
+  prim_sec_anchor_buf #(
+    .Width ( NumRegsData )
+  ) u_prim_buf_data_out_re (
+    .in_i  ( data_out_re     ),
+    .out_o ( data_out_re_buf )
+  );
 
   //////////////////////
   // Key, IV and Data //
@@ -361,6 +395,17 @@ module aes_core
                      (aes_mode_q == AES_OFB)                        ? CIPH_FWD :
                      (aes_mode_q == AES_CTR)                        ? CIPH_FWD : CIPH_FWD;
 
+  // This primitive is used to place a size-only constraint on the
+  // buffers to act as a synthesis optimization barrier.
+  logic [$bits(ciph_op_e)-1:0] cipher_op_raw;
+  prim_buf #(
+    .Width($bits(ciph_op_e))
+  ) u_prim_buf_op (
+    .in_i(cipher_op),
+    .out_o(cipher_op_raw)
+  );
+  assign cipher_op_buf = ciph_op_e'(cipher_op_raw);
+
   for (genvar s = 0; s < NumShares; s++) begin : gen_cipher_prd_clearing
     assign cipher_prd_clearing[s] = prd_clearing[s];
   end
@@ -384,7 +429,7 @@ module aes_core
     endcase
   end
 
-  if (!Masking) begin : gen_state_init_unmasked
+  if (!SecMasking) begin : gen_state_init_unmasked
     assign state_init[0] = state_in ^ add_state_in;
 
     logic [3:0][3:0][7:0] unused_state_mask;
@@ -395,7 +440,7 @@ module aes_core
     assign state_init[1] = state_mask;                             // Mask share
   end
 
-  if (!Masking) begin : gen_key_init_unmasked
+  if (!SecMasking) begin : gen_key_init_unmasked
     // Combine the two key shares for the unmasked cipher core. This causes SCA leakage of the key
     // and thus should be avoided.
     assign key_init_cipher[0] = key_init_q[0] ^ key_init_q[1];
@@ -409,8 +454,8 @@ module aes_core
   // Cipher core
   aes_cipher_core #(
     .AES192Enable           ( AES192Enable           ),
-    .Masking                ( Masking                ),
-    .SBoxImpl               ( SBoxImpl               ),
+    .SecMasking             ( SecMasking             ),
+    .SecSBoxImpl            ( SecSBoxImpl            ),
     .SecAllowForcingMasks   ( SecAllowForcingMasks   ),
     .SecSkipPRNGReseeding   ( SecSkipPRNGReseeding   ),
     .RndCnstMaskingLfsrSeed ( RndCnstMaskingLfsrSeed ),
@@ -426,7 +471,7 @@ module aes_core
     .out_ready_i        ( cipher_out_ready           ),
 
     .cfg_valid_i        ( ~ctrl_err_storage          ), // Used for gating assertions only.
-    .op_i               ( cipher_op                  ),
+    .op_i               ( cipher_op_buf              ),
     .key_len_i          ( key_len_q                  ),
     .crypt_i            ( cipher_crypt               ),
     .crypt_o            ( cipher_crypt_busy          ),
@@ -454,7 +499,7 @@ module aes_core
     .state_o            ( state_done                 )
   );
 
-  if (!Masking) begin : gen_state_out_unmasked
+  if (!SecMasking) begin : gen_state_out_unmasked
     assign state_out = state_done[0];
   end else begin : gen_state_out_masked
     // Unmask the cipher core output. This might get reworked in the future when masking the
@@ -529,7 +574,7 @@ module aes_core
 
   // Control
   aes_control #(
-    .Masking              ( Masking              ),
+    .SecMasking           ( SecMasking           ),
     .SecStartTriggerDelay ( SecStartTriggerDelay )
   ) u_aes_control (
     .clk_i                     ( clk_i                                  ),
@@ -541,7 +586,7 @@ module aes_core
     .ctrl_err_storage_i        ( ctrl_err_storage                       ),
     .op_i                      ( aes_op_q                               ),
     .mode_i                    ( aes_mode_q                             ),
-    .cipher_op_i               ( cipher_op                              ),
+    .cipher_op_i               ( cipher_op_buf                          ),
     .sideload_i                ( sideload_q                             ),
     .prng_reseed_rate_i        ( prng_reseed_rate_q                     ),
     .manual_operation_i        ( manual_operation_q                     ),
@@ -557,10 +602,10 @@ module aes_core
     .alert_o                   ( ctrl_alert                             ),
 
     .key_sideload_valid_i      ( keymgr_key_i.valid                     ),
-    .key_init_qe_i             ( key_init_qe                            ),
-    .iv_qe_i                   ( iv_qe                                  ),
-    .data_in_qe_i              ( data_in_qe                             ),
-    .data_out_re_i             ( data_out_re                            ),
+    .key_init_qe_i             ( key_init_qe_buf                        ),
+    .iv_qe_i                   ( iv_qe_buf                              ),
+    .data_in_qe_i              ( data_in_qe_buf                         ),
+    .data_out_re_i             ( data_out_re_buf                        ),
     .data_in_we_o              ( data_in_we                             ),
     .data_out_we_o             ( data_out_we_ctrl                       ),
 
@@ -648,8 +693,9 @@ module aes_core
   // registers.
 
   aes_sel_buf_chk #(
-    .Num   ( DIPSelNum   ),
-    .Width ( DIPSelWidth )
+    .Num      ( DIPSelNum   ),
+    .Width    ( DIPSelWidth ),
+    .EnSecBuf ( 1'b1        )
   ) u_aes_data_in_prev_sel_buf_chk (
     .clk_i  ( clk_i                 ),
     .rst_ni ( rst_ni                ),
@@ -660,8 +706,9 @@ module aes_core
   assign data_in_prev_sel = dip_sel_e'(data_in_prev_sel_raw);
 
   aes_sel_buf_chk #(
-    .Num   ( SISelNum   ),
-    .Width ( SISelWidth )
+    .Num      ( SISelNum   ),
+    .Width    ( SISelWidth ),
+    .EnSecBuf ( 1'b1       )
   ) u_aes_state_in_sel_buf_chk (
     .clk_i  ( clk_i             ),
     .rst_ni ( rst_ni            ),
@@ -672,8 +719,9 @@ module aes_core
   assign state_in_sel = si_sel_e'(state_in_sel_raw);
 
   aes_sel_buf_chk #(
-    .Num   ( AddSISelNum   ),
-    .Width ( AddSISelWidth )
+    .Num      ( AddSISelNum   ),
+    .Width    ( AddSISelWidth ),
+    .EnSecBuf ( 1'b1          )
   ) u_aes_add_state_in_sel_buf_chk (
     .clk_i  ( clk_i                 ),
     .rst_ni ( rst_ni                ),
@@ -684,8 +732,9 @@ module aes_core
   assign add_state_in_sel = add_si_sel_e'(add_state_in_sel_raw);
 
   aes_sel_buf_chk #(
-    .Num   ( AddSOSelNum   ),
-    .Width ( AddSOSelWidth )
+    .Num      ( AddSOSelNum   ),
+    .Width    ( AddSOSelWidth ),
+    .EnSecBuf ( 1'b1          )
   ) u_aes_add_state_out_sel_buf_chk (
     .clk_i  ( clk_i                  ),
     .rst_ni ( rst_ni                 ),
@@ -696,8 +745,9 @@ module aes_core
   assign add_state_out_sel = add_so_sel_e'(add_state_out_sel_raw);
 
   aes_sel_buf_chk #(
-    .Num   ( KeyInitSelNum   ),
-    .Width ( KeyInitSelWidth )
+    .Num      ( KeyInitSelNum   ),
+    .Width    ( KeyInitSelWidth ),
+    .EnSecBuf ( 1'b1            )
   ) u_aes_key_init_sel_buf_chk (
     .clk_i  ( clk_i             ),
     .rst_ni ( rst_ni            ),
@@ -708,8 +758,9 @@ module aes_core
   assign key_init_sel = key_init_sel_e'(key_init_sel_raw);
 
   aes_sel_buf_chk #(
-    .Num   ( IVSelNum   ),
-    .Width ( IVSelWidth )
+    .Num      ( IVSelNum   ),
+    .Width    ( IVSelWidth ),
+    .EnSecBuf ( 1'b1       )
   ) u_aes_iv_sel_buf_chk (
     .clk_i  ( clk_i       ),
     .rst_ni ( rst_ni      ),
@@ -756,11 +807,15 @@ module aes_core
   assign sp2v_sig[NumSharesKey * NumRegsKey + NumSlicesCtr + 0] = data_in_prev_we_ctrl;
   assign sp2v_sig[NumSharesKey * NumRegsKey + NumSlicesCtr + 1] = data_out_we_ctrl;
 
+  // All signals inside sp2v_sig are eventually converted to single-rail signals.
+  localparam bit [NumSp2VSig-1:0] Sp2VEnSecBuf = {NumSp2VSig{1'b1}};
+
   // Individually check sparsely encoded signals.
   for (genvar i = 0; i < NumSp2VSig; i++) begin : gen_sel_buf_chk
     aes_sel_buf_chk #(
-      .Num   ( Sp2VNum   ),
-      .Width ( Sp2VWidth )
+      .Num      ( Sp2VNum         ),
+      .Width    ( Sp2VWidth       ),
+      .EnSecBuf ( Sp2VEnSecBuf[i] )
     ) u_aes_sp2v_sig_buf_chk_i (
       .clk_i  ( clk_i               ),
       .rst_ni ( rst_ni              ),
@@ -834,14 +889,17 @@ module aes_core
   // Alerts //
   ////////////
 
+  // Should fatal alerts clear the status register?
+  assign clear_on_fatal = ClearStatusOnFatalAlert ? alert_fatal_o : 1'b0;
+
   // Recoverable alert conditions are signaled as a single alert event.
   assign ctrl_err_update = ctrl_reg_err_update | reg2hw.ctrl_aux_shadowed.err_update;
   assign alert_recov_o = ctrl_err_update;
 
   // The recoverable alert is observable via status register until the AES operation is restarted
   // by re-writing the Control Register. Fatal alerts clear all other bits in the status register.
-  assign hw2reg.status.alert_recov_ctrl_update_err.d  = ctrl_err_update & ~alert_fatal_o;
-  assign hw2reg.status.alert_recov_ctrl_update_err.de = ctrl_err_update | ctrl_we | alert_fatal_o;
+  assign hw2reg.status.alert_recov_ctrl_update_err.d  = ctrl_err_update & ~clear_on_fatal;
+  assign hw2reg.status.alert_recov_ctrl_update_err.de = ctrl_err_update | ctrl_we | clear_on_fatal;
 
   // Fatal alert conditions need to remain asserted until reset.
   assign ctrl_err_storage_d = ctrl_reg_err_storage | reg2hw.ctrl_aux_shadowed.err_storage;
@@ -869,9 +927,16 @@ module aes_core
   logic unused_alert_signals;
   assign unused_alert_signals = ^reg2hw.alert_test;
 
+  // Unused inputs
+  logic unused_idle;
+  assign unused_idle = reg2hw.status.idle.q;
+
   ////////////////
   // Assertions //
   ////////////////
+
+  // Create a lint error to reduce the risk of accidentally disabling the masking.
+  `ASSERT_STATIC_LINT_ERROR(AesCoreSecMaskingNonDefault, SecMasking == 1)
 
   // Selectors must be known/valid
   `ASSERT(AesModeValid, !ctrl_err_storage |-> aes_mode_q inside {

@@ -123,6 +123,17 @@ module ${mod_name} (
   tlul_pkg::tl_d2h_t tl_reg_d2h;
 % endif
 
+## The clock and reset inputs aren't used if this device interface has no
+## registers, only one window and isn't marked asynchronous. In that case, add
+## an unused_ signal to avoid lint warnings.
+% if not rb.all_regs and num_wins == 1 and not rb.async_if:
+  // Because we have no registers and only one window, this block is purely
+  // combinatorial. Mark the clk and reset inputs as unused.
+  logic unused_clk, unused_rst_n;
+  assign unused_clk = clk_i;
+  assign unused_rst_n = rst_ni;
+
+% endif
 % if rb.async_if:
   tlul_pkg::tl_h2d_t tl_async_h2d;
   tlul_pkg::tl_d2h_t tl_async_d2h;
@@ -418,7 +429,8 @@ ${field_sig_decl(f, sig_name, r.hwext, r.shadowed, r.async_clk)}\
     .dst_wd_o     (${dst_wd_expr})
   );
       % if r.needs_we():
-  assign unused_${base_name}_${r_name}_wdata = ^${base_name}_${r_name}_wdata;
+  assign unused_${base_name}_${r_name}_wdata =
+      ^${base_name}_${r_name}_wdata;
       % endif
     % endif
   % endfor
@@ -672,7 +684,7 @@ ${bits.msb}\
     reg_name = reg.name.lower()
     clk_expr = reg.async_clk.clock if reg.async_clk else reg_clk_expr
     rst_expr = reg.async_clk.reset if reg.async_clk else reg_rst_expr
-    re_expr = f'{reg_name}_re' if field.swaccess.allows_read() or reg.shadowed else "1'b0"
+    re_expr = f'{clk_base_name}{reg_name}_re' if field.swaccess.allows_read() or reg.shadowed else "1'b0"
 
     # software inputs to field instance, write enable, read enable, write data
     if field.swaccess.allows_write():
@@ -713,7 +725,7 @@ ${bits.msb}\
     qre_expr = f'reg2hw.{fsig_name}.re' if reg.hwre or reg.shadowed else ""
 
     if field.hwaccess.allows_read():
-      qe_expr = f'reg2hw.{fsig_name}.qe' if reg.hwqe else ''
+      qe_expr = f'reg2hw.{fsig_name}.qe' if field.hwqe else ''
       q_expr = f'reg2hw.{fsig_name}.q'
     else:
       qe_expr = ''
@@ -723,11 +735,6 @@ ${bits.msb}\
     async_suffix = '_int' if reg.async_clk else ''
     qs_expr = f'{clk_base_name}{finst_name}_qs{async_suffix}' if field.swaccess.allows_read() else ''
 
-%>\
-<%
-
-    if reg.async_clk:
-      update_expr = "sync_" + reg.async_clk.clock.strip("_iclk_")+ "_update"
 %>\
   % if reg.hwext:       ## if hwext, instantiate prim_subreg_ext
 <%
@@ -762,6 +769,32 @@ ${bits.msb}\
   // constant-only read
   assign ${finst_name}_qs = ${resval_expr};
     % else:
+      % if reg.async_clk and reg.shadowed:
+  logic async_${finst_name}_err_update;
+  logic async_${finst_name}_err_storage;
+
+  // storage error is persistent and can be sampled at any time
+  prim_flop_en #(
+    .Width(1),
+    .ResetValue('0)
+  ) u_${finst_name}_err_storage_sync (
+    .clk_i,
+    .rst_ni,
+    .en_i(sync_${clk_base_name}update),
+    .d_i(async_${finst_name}_err_storage),
+    .q_o(reg2hw.${fsig_name}.err_storage)
+  );
+
+  // update error is transient and must be immediately captured
+  prim_pulse_sync u_${finst_name}_err_update_sync (
+    .clk_src_i(${reg.async_clk.clock}),
+    .rst_src_ni(${reg.async_clk.reset}),
+    .src_pulse_i(async_${finst_name}_err_update),
+    .clk_dst_i(clk_i),
+    .rst_dst_ni(rst_ni),
+    .dst_pulse_o(reg2hw.${fsig_name}.err_update)
+  );
+      % endif
   ${subreg_block} #(
     .DW      (${field.bits.width()}),
     .SwAccess(prim_subreg_pkg::SwAccess${field.swaccess.value[1].name.upper()}),
@@ -798,8 +831,13 @@ ${bits.msb}\
     .phase  (),
 
     // Shadow register error conditions
+        % if reg.async_clk:
+    .err_update  (async_${finst_name}_err_update),
+    .err_storage (async_${finst_name}_err_storage)
+        % else:
     .err_update  (reg2hw.${fsig_name}.err_update),
     .err_storage (reg2hw.${fsig_name}.err_storage)
+        % endif
       % endif
   );
     % endif  ## end non-constant prim_subreg

@@ -4,13 +4,13 @@
 
 # Mask ROM Linker Parameters
 #
-# See `sw/device/lib/testing/test_rom_ext/test_rom_ext.ld` for additional info
+# See `sw/device/lib/testing/test_framework/ottf.ld` for additional info
 # about these parameters.
 
 rom_linkfile = files(['mask_rom.ld'])
 rom_link_args = [
-  '-Wl,-L,@0@'.format(meson.source_root()),
-  '-Wl,-T,@0@/@1@'.format(meson.source_root(), rom_linkfile[0]),
+  '-Wl,-L,@0@'.format(meson.project_source_root()),
+  '-Wl,-T,@0@/@1@'.format(meson.project_source_root(), rom_linkfile[0]),
 ] + embedded_target_extra_link_args
 rom_link_deps = [rom_linkfile]
 
@@ -182,6 +182,7 @@ primitive_bootstrap_lib = declare_dependency(
       sw_lib_dif_gpio,
       sw_lib_dif_spi_device,
       sw_silicon_creator_lib_driver_hmac,
+      sw_silicon_creator_lib_log,
     ],
   ),
 )
@@ -213,9 +214,9 @@ mask_rom_lib = declare_dependency(
       sw_silicon_creator_lib_driver_rnd,
       sw_silicon_creator_lib_driver_rstmgr,
       sw_silicon_creator_lib_driver_uart,
+      sw_silicon_creator_lib_driver_watchdog,
       sw_silicon_creator_lib_fake_deps,
       sw_silicon_creator_lib_irq_asm,
-      sw_silicon_creator_lib_log,
       sw_silicon_creator_lib_manifest,
       sw_silicon_creator_lib_shutdown,
       sw_silicon_creator_mask_rom_epmp,

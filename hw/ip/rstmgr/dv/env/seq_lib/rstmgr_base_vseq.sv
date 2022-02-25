@@ -30,17 +30,35 @@ class rstmgr_base_vseq extends cip_base_vseq #(
   // Some extra cycles from reset going inactive before the CPU's reset goes inactive.
   localparam int CPU_RESET_CLK_CYCLES = 10;
 
-  rand logic                                sw_reset;
-  rand logic                                scan_reset;
-  rand logic                                low_power_reset;
-  rand logic                                ndm_reset;
+  // The different types of reset.
+  typedef enum int {
+    ResetPOR,
+    ResetScan,
+    ResetLowPower,
+    ResetNdm,
+    ResetSw,
+    ResetHw
+  } reset_e;
+
+  typedef struct {
+    int code;
+    logic enable;
+    logic update;
+  } reset_expectations_t;
+
+  typedef struct {
+    string description;
+    reset_expectations_t expects;
+  } reset_test_info_t;
+
+  rand reset_e                              which_reset;
 
   rand sw_rst_t                             sw_rst_regwen;
   rand sw_rst_t                             sw_rst_ctrl_n;
 
   bit                                       reset_once;
 
-  rand ibex_pkg::crash_dump_t               cpu_dump;
+  rand rv_core_ibex_pkg::cpu_crash_dump_t   cpu_dump;
   rand alert_pkg::alert_crashdump_t         alert_dump;
 
   rand logic [pwrmgr_pkg::HwResetWidth-1:0] rstreqs;
@@ -60,11 +78,72 @@ class rstmgr_base_vseq extends cip_base_vseq #(
   rand int non_ndm_reset_cycles;
   constraint non_ndm_reset_cycles_c {non_ndm_reset_cycles inside {[4 : 16]};}
 
+  rand int sys_to_cpu_rst_active_cycles;
+  constraint sys_to_cpu_rst_active_cycles_c {sys_to_cpu_rst_active_cycles inside {[0 : 4]};}
+
+  rand int sys_to_cpu_rst_inactive_cycles;
+  constraint sys_to_cpu_rst_inactive_cycles_c {sys_to_cpu_rst_inactive_cycles inside {[0 : 4]};}
+
   // various knobs to enable certain routines
-  bit     do_rstmgr_init     = 1'b1;
+  bit do_rstmgr_init = 1'b1;
+  bit responders_running = 0;
+  bit check_rstreqs_en = 0;
+  static bit enable_cpu_to_sys_rst_release_response = 1'b1;
 
   mubi4_t scanmode;
-  int     scanmode_on_weight = 8;
+  int scanmode_on_weight = 8;
+
+  // What to expect when testing resets.
+  reset_test_info_t reset_test_infos[reset_e] = '{
+    ResetPOR: '{
+      description: "POR reset",
+      expects: '{
+        code: 1,
+        enable: 1'b0,
+        update: 1'b0
+      }
+    },
+    ResetScan: '{
+      description: "scan reset",
+      expects: '{
+        code: 1,
+        enable: 1'b0,
+        update: 1'b0
+      }
+    },
+    ResetLowPower: '{
+      description: "low power reset",
+      expects: '{
+        code: 2,
+        enable: 1'b1,
+        update: 1'b1
+      }
+    },
+    ResetNdm: '{
+      description: "ndm reset",
+      expects: '{
+        code: 4,
+        enable: 1'b1,
+        update: 1'b1
+      }
+    },
+    ResetSw: '{
+      description: "software reset",
+      expects: '{
+        code: 8,
+        enable: 1'b0,
+        update: 1'b1
+      }
+    },
+    ResetHw: '{
+      description: "hardware reset",
+      expects: '{
+        code: 16,
+        enable: 1'b0,
+        update: 1'b1
+      }
+    }
+  };
 
   `uvm_object_new
 
@@ -72,75 +151,83 @@ class rstmgr_base_vseq extends cip_base_vseq #(
     scanmode = get_rand_mubi4_val(scanmode_on_weight, 4, 4);
   endfunction
 
-  function void update_scanmode(prim_mubi_pkg::mubi4_t value);
+  local function void update_scanmode(prim_mubi_pkg::mubi4_t value);
     cfg.rstmgr_vif.scanmode_i = value;
   endfunction
 
-  function void update_scan_rst_n(logic value);
+  local function void update_scan_rst_n(logic value);
     cfg.rstmgr_vif.scan_rst_ni = value;
   endfunction
 
-  function void set_pwrmgr_rst_reqs(logic rst_lc_req, logic rst_sys_req);
+  local function void set_pwrmgr_rst_reqs(logic rst_lc_req, logic rst_sys_req);
+    `uvm_info(`gfn, $sformatf("Setting pwr_i lc_req=%x sys_req=%x", rst_lc_req, rst_sys_req),
+              UVM_MEDIUM)
     cfg.rstmgr_vif.pwr_i.rst_lc_req  = {rstmgr_pkg::PowerDomains{rst_lc_req}};
     cfg.rstmgr_vif.pwr_i.rst_sys_req = {rstmgr_pkg::PowerDomains{rst_sys_req}};
   endfunction
 
-  function void set_rstreqs(logic [pwrmgr_pkg::HwResetWidth:0] rstreqs);
+  local function void set_rstreqs(logic [pwrmgr_pkg::HwResetWidth:0] rstreqs);
     cfg.rstmgr_vif.pwr_i.rstreqs = rstreqs;
   endfunction
 
-  function void set_reset_cause(pwrmgr_pkg::reset_cause_e reset_cause);
+  local function void set_reset_cause(pwrmgr_pkg::reset_cause_e reset_cause);
     cfg.rstmgr_vif.pwr_i.reset_cause = reset_cause;
   endfunction
 
-  function void set_ndmreset_req(logic value);
+  virtual function void set_ndmreset_req(logic value);
     cfg.rstmgr_vif.cpu_i.ndmreset_req = value;
   endfunction
 
-  function void set_rst_cpu_n(logic value);
+  local function logic get_rst_cpu_n();
+    return cfg.rstmgr_vif.cpu_i.rst_cpu_n;
+  endfunction
+
+  virtual function void set_rst_cpu_n(logic value);
+    `uvm_info(`gfn, $sformatf("Setting rst_cpu_n=%b", value), UVM_MEDIUM)
     cfg.rstmgr_vif.cpu_i.rst_cpu_n = value;
   endfunction
 
-  function logic is_running_sequence(string seq_name);
+  static function logic is_running_sequence(string seq_name);
     string actual_sequence = "none";
     // Okay to ignore return value since the default won't match.
     void'($value$plusargs("UVM_TEST_SEQ=%0s", actual_sequence));
     return actual_sequence.compare(seq_name) == 0;
   endfunction
 
-  task check_reset_info(logic [TL_DW-1:0] expected_value, string msg = "reset_info mismatch");
+  virtual protected task check_reset_info(logic [TL_DW-1:0] expected_value,
+                                          string msg = "reset_info mismatch");
     csr_rd_check(.ptr(ral.reset_info), .compare_value(expected_value), .err_msg(msg));
   endtask
 
-  function void set_cpu_dump_info(ibex_pkg::crash_dump_t cpu_dump);
+  local function void set_cpu_dump_info(rv_core_ibex_pkg::cpu_crash_dump_t cpu_dump);
     `uvm_info(`gfn, $sformatf("Setting cpu_dump_i to %p", cpu_dump), UVM_MEDIUM)
     cfg.rstmgr_vif.cpu_dump_i = cpu_dump;
   endfunction
 
-  task check_cpu_dump_info(ibex_pkg::crash_dump_t cpu_dump);
+  local task check_cpu_dump_info(rv_core_ibex_pkg::cpu_crash_dump_t cpu_dump);
     `uvm_info(`gfn, "Checking cpu_info", UVM_MEDIUM)
     csr_wr(.ptr(ral.cpu_info_ctrl.index), .value(3));
-    csr_rd_check(.ptr(ral.cpu_info), .compare_value(cpu_dump.current_pc),
+    csr_rd_check(.ptr(ral.cpu_info), .compare_value(cpu_dump.current.current_pc),
                  .err_msg("checking current_pc"));
     csr_wr(.ptr(ral.cpu_info_ctrl.index), .value(2));
-    csr_rd_check(.ptr(ral.cpu_info), .compare_value(cpu_dump.next_pc),
+    csr_rd_check(.ptr(ral.cpu_info), .compare_value(cpu_dump.current.next_pc),
                  .err_msg("checking next_pc"));
     csr_wr(.ptr(ral.cpu_info_ctrl.index), .value(1));
-    csr_rd_check(.ptr(ral.cpu_info), .compare_value(cpu_dump.last_data_addr),
+    csr_rd_check(.ptr(ral.cpu_info), .compare_value(cpu_dump.current.last_data_addr),
                  .err_msg("checking last_data_addr"));
     csr_wr(.ptr(ral.cpu_info_ctrl.index), .value(0));
-    csr_rd_check(.ptr(ral.cpu_info), .compare_value(cpu_dump.exception_addr),
+    csr_rd_check(.ptr(ral.cpu_info), .compare_value(cpu_dump.current.exception_addr),
                  .err_msg("checking exception_addr"));
   endtask
 
-  function void set_alert_dump_info(alert_pkg::alert_crashdump_t alert_dump);
+  local function void set_alert_dump_info(alert_pkg::alert_crashdump_t alert_dump);
     `uvm_info(`gfn, $sformatf(
               "Setting alert_dump_i to 0x%x", linearized_alert_dump_t'({>>{alert_dump}})),
               UVM_MEDIUM)
     cfg.rstmgr_vif.alert_dump_i = alert_dump;
   endfunction
 
-  task check_alert_dump_info(alert_pkg::alert_crashdump_t alert_dump);
+  local task check_alert_dump_info(alert_pkg::alert_crashdump_t alert_dump);
     localparam int DumpWidth = $bits(alert_dump);
     localparam int WordWidth = 32;
     logic [DumpWidth-1:0] linear_dump = {>>{alert_dump}};
@@ -159,32 +246,36 @@ class rstmgr_base_vseq extends cip_base_vseq #(
     end
   endtask
 
-  task set_alert_info_for_capture(alert_pkg::alert_crashdump_t alert_dump, logic enable);
+  virtual protected task set_alert_info_for_capture(alert_pkg::alert_crashdump_t alert_dump,
+                                                    logic enable);
     set_alert_dump_info(alert_dump);
     `uvm_info(`gfn, $sformatf("%0sabling alert_info capture", (enable ? "En" : "Dis")), UVM_MEDIUM)
     csr_wr(.ptr(ral.alert_info_ctrl.en), .value(enable));
   endtask
 
-  task set_cpu_info_for_capture(ibex_pkg::crash_dump_t cpu_dump, logic enable);
+  virtual protected task set_cpu_info_for_capture(rv_core_ibex_pkg::cpu_crash_dump_t cpu_dump,
+                                                  logic enable);
     set_cpu_dump_info(cpu_dump);
     `uvm_info(`gfn, $sformatf("%0sabling cpu_info capture", (enable ? "En" : "Dis")), UVM_MEDIUM)
     csr_wr(.ptr(ral.cpu_info_ctrl.en), .value(enable));
   endtask
 
-  task set_alert_and_cpu_info_for_capture(alert_pkg::alert_crashdump_t alert_dump,
-                                          ibex_pkg::crash_dump_t cpu_dump);
+  virtual protected task set_alert_and_cpu_info_for_capture(alert_pkg::alert_crashdump_t alert_dump,
+      rv_core_ibex_pkg::cpu_crash_dump_t cpu_dump);
     set_alert_info_for_capture(alert_dump, 1'b1);
     set_cpu_info_for_capture(cpu_dump, 1'b1);
   endtask
 
-  task check_alert_info_after_reset(alert_pkg::alert_crashdump_t alert_dump, logic enable);
+  virtual protected task check_alert_info_after_reset(alert_pkg::alert_crashdump_t alert_dump,
+                                                      logic enable);
     csr_rd_check(.ptr(ral.alert_info_ctrl.en), .compare_value(enable),
                  .err_msg($sformatf("Expected alert info capture enable %b", enable)));
     csr_wr(.ptr(ral.alert_info_ctrl.en), .value(enable));
     check_alert_dump_info(alert_dump);
   endtask
 
-  task check_cpu_info_after_reset(ibex_pkg::crash_dump_t cpu_dump, logic enable);
+  virtual protected task check_cpu_info_after_reset(rv_core_ibex_pkg::cpu_crash_dump_t cpu_dump,
+                                                    logic enable);
     csr_rd_check(.ptr(ral.cpu_info_ctrl.en), .compare_value(enable),
                  .err_msg($sformatf("Expected cpu info capture enable %b", enable)));
     csr_wr(.ptr(ral.cpu_info_ctrl.en), .value(enable));
@@ -196,20 +287,28 @@ class rstmgr_base_vseq extends cip_base_vseq #(
   // hardware may update them on most resets. This can cause the subsequent writes to the .index
   // field to overwrite the .en field. To make things simpler, after checking .en's expected
   // value we write it to update the mirrored value.
-  task check_alert_and_cpu_info_after_reset(alert_pkg::alert_crashdump_t alert_dump,
-                                            ibex_pkg::crash_dump_t cpu_dump, logic enable);
+  virtual protected task check_alert_and_cpu_info_after_reset(
+      alert_pkg::alert_crashdump_t alert_dump, ibex_pkg::crash_dump_t cpu_dump, logic enable);
     check_alert_info_after_reset(alert_dump, enable);
     check_cpu_info_after_reset(cpu_dump, enable);
   endtask
 
-  task clear_alert_and_cpu_info();
+  virtual protected task clear_alert_and_cpu_info();
     set_alert_and_cpu_info_for_capture('0, '0);
     send_sw_reset();
     check_alert_and_cpu_info_after_reset(.alert_dump('0), .cpu_dump('0), .enable(0));
   endtask
 
+  virtual protected task clear_sw_rst_ctrl_n();
+    const sw_rst_t sw_rst_all_ones = '1;
+    csr_wr(.ptr(ral.sw_rst_ctrl_n[0]), .value(sw_rst_all_ones));
+    csr_rd_check(.ptr(ral.sw_rst_ctrl_n[0]), .compare_value(sw_rst_all_ones),
+                 .err_msg("Expected sw_rst_ctrl_n to be set"));
+  endtask
+
   // Stimulate and check sw_rst_ctrl_n with a given sw_rst_regen setting.
-  task check_sw_rst_ctrl_n(sw_rst_t sw_rst_ctrl_n, sw_rst_t sw_rst_regen, bit erase_ctrl_n);
+  virtual protected task check_sw_rst_ctrl_n(sw_rst_t sw_rst_ctrl_n, sw_rst_t sw_rst_regen,
+                                             bit erase_ctrl_n);
     sw_rst_t exp_ctrl_n;
 
     `uvm_info(`gfn, $sformatf("Set sw_rst_ctrl_n to 0x%0x", sw_rst_ctrl_n), UVM_MEDIUM)
@@ -223,16 +322,13 @@ class rstmgr_base_vseq extends cip_base_vseq #(
               UVM_MEDIUM)
     csr_rd_check(.ptr(ral.sw_rst_ctrl_n[0]), .compare_value(exp_ctrl_n),
                  .err_msg("Expected enabled updates in sw_rst_ctrl_n"));
-    if (erase_ctrl_n) begin
-      const sw_rst_t sw_rst_all_ones = '1;
-      csr_wr(.ptr(ral.sw_rst_ctrl_n[0]), .value(sw_rst_all_ones));
-      csr_rd_check(.ptr(ral.sw_rst_ctrl_n[0]), .compare_value(sw_rst_all_ones),
-                   .err_msg("Expected sw_rst_ctrl_n to be set"));
-    end
+    if (erase_ctrl_n) clear_sw_rst_ctrl_n();
   endtask
 
   // Happens with hardware resets.
   local task reset_start(pwrmgr_pkg::reset_cause_e reset_cause);
+    `uvm_info(`gfn, $sformatf("Starting pwrmgr inputs for %0s request", reset_cause.name()),
+              UVM_MEDIUM)
     set_reset_cause(reset_cause);
     // These lag the reset requests since they are set after the pwrmgr fast fsm has made some
     // state transitions.
@@ -241,24 +337,31 @@ class rstmgr_base_vseq extends cip_base_vseq #(
   endtask
 
   local task reset_done();
+    `uvm_info(`gfn, "Releasing pwrmgr inputs for reset request", UVM_MEDIUM)
     set_reset_cause(pwrmgr_pkg::ResetNone);
     set_pwrmgr_rst_reqs(.rst_lc_req('0), .rst_sys_req('0));
   endtask
 
-  // Sends either a low power exit or an external hardware reset request, and drops it once it
-  // should have caused the hardware to handle it.
-  task send_reset(pwrmgr_pkg::reset_cause_e reset_cause,
-                  logic [pwrmgr_pkg::TotalResetWidth-1:0] rstreqs);
-    `uvm_info(`gfn, $sformatf("Sending %0s reset", reset_cause.name()), UVM_LOW)
-    set_rstreqs(rstreqs);
-    reset_start(reset_cause);
+  virtual protected task release_reset(pwrmgr_pkg::reset_cause_e reset_cause);
     cfg.io_div4_clk_rst_vif.wait_clks(non_ndm_reset_cycles);
     // Cause the reset to drop.
+    `uvm_info(`gfn, $sformatf("Releasing %0s reset", reset_cause.name()), UVM_LOW)
     set_rstreqs(0);
     reset_done();
   endtask
 
-  task send_scan_reset();
+  // Sends either a low power exit or an external hardware reset request, and drops it once it
+  // should have caused the hardware to handle it.
+  virtual protected task send_reset(pwrmgr_pkg::reset_cause_e reset_cause,
+                                    logic [pwrmgr_pkg::TotalResetWidth-1:0] rstreqs,
+                                    logic clear_it = 1);
+    `uvm_info(`gfn, $sformatf("Sending %0s reset", reset_cause.name()), UVM_LOW)
+    set_rstreqs(rstreqs);
+    reset_start(reset_cause);
+    if (clear_it) release_reset(reset_cause);
+  endtask
+
+  virtual protected task send_scan_reset();
     `uvm_info(`gfn, "Sending scan reset.", UVM_MEDIUM)
     update_scanmode(prim_mubi_pkg::MuBi4True);
     cfg.io_div4_clk_rst_vif.wait_clks(scanmode_to_scan_rst_cycles);
@@ -270,6 +373,7 @@ class rstmgr_base_vseq extends cip_base_vseq #(
     update_scanmode(prim_mubi_pkg::MuBi4False);
     update_scan_rst_n(1'b1);
     reset_done();
+
     // This makes sure the clock has restarted before this returns.
     cfg.io_div4_clk_rst_vif.wait_clks(1);
     `uvm_info(`gfn, "Done sending scan reset.", UVM_MEDIUM)
@@ -277,7 +381,7 @@ class rstmgr_base_vseq extends cip_base_vseq #(
 
   // Sends an ndm reset, and drops it once it should have
   // caused the hardware to handle it.
-  task send_ndm_reset();
+  virtual protected task send_ndm_reset();
     set_ndmreset_req(1'b1);
     `uvm_info(`gfn, "Sending ndm reset", UVM_LOW)
     cfg.io_div4_clk_rst_vif.wait_clks(ndm_reset_cycles);
@@ -285,7 +389,7 @@ class rstmgr_base_vseq extends cip_base_vseq #(
   endtask
 
   // Requests a sw reset. It is cleared by hardware once the reset is taken.
-  task send_sw_reset();
+  virtual protected task send_sw_reset();
     `uvm_info(`gfn, "Sending sw reset", UVM_LOW)
     csr_wr(.ptr(ral.reset_req), .value(prim_mubi_pkg::MuBi4True));
     reset_start(pwrmgr_pkg::HwReq);
@@ -303,14 +407,7 @@ class rstmgr_base_vseq extends cip_base_vseq #(
     // TODO
   endtask
 
-  task por_reset();
-    cfg.rstmgr_vif.por_n = '0;
-    cfg.aon_clk_rst_vif.wait_clks(POR_CLK_CYCLES);
-    cfg.rstmgr_vif.por_n = '1;
-    @(posedge cfg.rstmgr_vif.resets_o.rst_por_io_div4_n[0]);
-  endtask
-
-  task start_clocks();
+  local task start_clocks();
     fork
       cfg.aon_clk_rst_vif.apply_reset(.pre_reset_dly_clks(0),
                                       .reset_width_clks(BOGUS_RESET_CLK_CYCLES));
@@ -327,27 +424,30 @@ class rstmgr_base_vseq extends cip_base_vseq #(
     join
   endtask
 
-  // This waits till the outgoing reset for the CPU goes inactive. It also waits at least one
-  // aon cycle to make sure we don't drop por_n_i before SVA has time to detect the por_aon
-  // reset went inactive.
-  local task wait_for_cpu_out_of_reset();
+  virtual protected task por_reset();
+    `uvm_info(`gfn, "Starting POR", UVM_MEDIUM)
+    start_clocks();
+    cfg.rstmgr_vif.por_n = '0;
+    cfg.aon_clk_rst_vif.wait_clks(POR_CLK_CYCLES);
+    cfg.rstmgr_vif.por_n = '1;
+    reset_start(pwrmgr_pkg::ResetUndefined);
+    cfg.io_div4_clk_rst_vif.wait_clks(non_ndm_reset_cycles);
+    reset_done();
     `DV_SPINWAIT_EXIT(wait (cfg.rstmgr_vif.resets_o.rst_sys_n[1] == 1'b1);,
                       cfg.clk_rst_vif.wait_clks(CPU_RESET_CLK_CYCLES);,
                       "timeout waiting for cpu reset inactive")
-    cfg.aon_clk_rst_vif.wait_clks(1);
+    if (!responders_running) begin
+      `uvm_info(`gfn, "Responders not running, release cpu reset", UVM_MEDIUM)
+      cfg.clk_rst_vif.wait_clks(sys_to_cpu_rst_active_cycles);
+      set_rst_cpu_n(1);
+    end
   endtask
 
   virtual task apply_reset(string kind = "HARD");
     fork
       por_reset();
-      start_clocks();
       super.apply_reset(kind);
     join
-  endtask
-
-  task post_apply_reset(string reset_kind = "HARD");
-    super.post_apply_reset(reset_kind);
-    wait_for_cpu_out_of_reset();
   endtask
 
   virtual task apply_resets_concurrently(int reset_duration_ps = 0);
@@ -356,6 +456,45 @@ class rstmgr_base_vseq extends cip_base_vseq #(
       start_clocks();
       super.apply_resets_concurrently(reset_duration_ps);
     join
+  endtask
+
+  virtual protected task responders();
+    fork
+      forever
+        @(negedge cfg.rstmgr_vif.resets_o.rst_sys_n[1]) begin
+          cfg.clk_rst_vif.wait_clks(sys_to_cpu_rst_active_cycles);
+          set_rst_cpu_n(0);
+        end
+      forever
+        @cfg.clk_rst_vif.cb begin
+          if (enable_cpu_to_sys_rst_release_response && cfg.rstmgr_vif.resets_o.rst_sys_n[1] &&
+              !get_rst_cpu_n()) begin
+            `uvm_info(`gfn, "release responder activated", UVM_MEDIUM)
+            cfg.clk_rst_vif.wait_clks(sys_to_cpu_rst_active_cycles);
+            set_rst_cpu_n(1);
+          end
+        end
+    join_none
+  endtask : responders
+
+  local task start_responders();
+    // Initialize rst_cpu_n once for consistency.
+    set_rst_cpu_n(cfg.rstmgr_vif.resets_o.rst_sys_n[1]);
+    fork : isolation_fork
+      fork
+        `uvm_info(`gfn, "Starting responders", UVM_MEDIUM)
+        responders();
+      join
+    join
+    responders_running = 1;
+  endtask
+
+  task pre_start();
+    if (do_rstmgr_init) rstmgr_init();
+    super.pre_start();
+    cfg.pwrmgr_rstmgr_sva_vif.check_rstreqs_en = 0;
+    start_responders();
+    `uvm_info(`gfn, "Started responders", UVM_MEDIUM)
   endtask
 
   // setup basic rstmgr features
@@ -373,7 +512,7 @@ class rstmgr_base_vseq extends cip_base_vseq #(
     set_rstreqs('0);
     set_reset_cause(pwrmgr_pkg::ResetNone);
     set_ndmreset_req('0);
-    set_rst_cpu_n('1);
+    set_rst_cpu_n('0);
   endtask
 
 endclass : rstmgr_base_vseq

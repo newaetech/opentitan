@@ -4,7 +4,7 @@
 
 # Mask ROM Linker Parameters
 #
-# See `sw/device/lib/testing/test_rom_ext/test_rom_ext.ld` for additional info
+# See `sw/device/lib/testing/test_framework/ottf.ld` for additional info
 # about these parameters.
 
 bare_metal_linkfile_slot_a = files(['bare_metal_slot_a.ld'])
@@ -15,8 +15,8 @@ bare_metal_link_info = {
   [
     # Link arguments for slot A.
     [
-      '-Wl,-L,@0@'.format(meson.source_root()),
-      '-Wl,-T,@0@/@1@'.format(meson.source_root(), bare_metal_linkfile_slot_a[0]),
+      '-Wl,-L,@0@'.format(meson.project_source_root()),
+      '-Wl,-T,@0@/@1@'.format(meson.project_source_root(), bare_metal_linkfile_slot_a[0]),
     ] + embedded_target_extra_link_args,
     # Link dependency file for slot A.
     [
@@ -27,8 +27,8 @@ bare_metal_link_info = {
   [
     # Link arguments for slot B.
     [
-      '-Wl,-L,@0@'.format(meson.source_root()),
-      '-Wl,-T,@0@/@1@'.format(meson.source_root(), bare_metal_linkfile_slot_b[0]),
+      '-Wl,-L,@0@'.format(meson.project_source_root()),
+      '-Wl,-T,@0@/@1@'.format(meson.project_source_root(), bare_metal_linkfile_slot_b[0]),
     ] + embedded_target_extra_link_args,
     # Link dependency file for slot B.
     [

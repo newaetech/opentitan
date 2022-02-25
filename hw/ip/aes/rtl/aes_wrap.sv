@@ -8,13 +8,13 @@ module aes_wrap
   import aes_pkg::*;
 #(
   parameter bit         AES192Enable = 1,           // Can be 0 (disable), or 1 (enable).
-  parameter bit         Masking      = 1,           // Can be 0 (no masking), or
+  parameter bit         SecMasking   = 1,           // Can be 0 (no masking), or
                                                     // 1 (first-order masking) of the cipher
                                                     // core. Masking requires the use of a
                                                     // masked S-Box, see SBoxImpl parameter.
                                                     // Note: currently, constant masks are
                                                     // used, this is of course not secure.
-  parameter sbox_impl_e SBoxImpl     = SBoxImplDom  // See aes_pkg.sv
+  parameter sbox_impl_e SecSBoxImpl  = SBoxImplDom  // See aes_pkg.sv
 ) (
   input  logic         clk_i,
   input  logic         rst_ni,
@@ -22,6 +22,9 @@ module aes_wrap
   input  logic [127:0] aes_input,
   input  logic [255:0] aes_key,
   output logic [127:0] aes_output,
+
+  output logic         alert_recov_o,
+  output logic         alert_fatal_o,
 
   output logic         test_done_o
 );
@@ -40,14 +43,14 @@ module aes_wrap
   tl_h2d_t h2d, h2d_intg; // req
   tl_d2h_t d2h; // rsp
   prim_alert_pkg::alert_rx_t [NumAlerts-1:0] alert_rx;
-  prim_alert_pkg::alert_tx_t [NumAlerts-1:0] unused_alert_tx;
+  prim_alert_pkg::alert_tx_t [NumAlerts-1:0] alert_tx;
 
   // Sideload interface - allows for quicker simulation.
   assign keymgr_key.valid = 1'b1;
   assign keymgr_key.key[0][255:0] = aes_key;
   assign keymgr_key.key[1][255:0] = '0;
 
-  // Alerts - currently ignored. Should be hooked up to check FI detection.
+  // Alert receivers
   assign alert_rx[0].ping_p = 1'b0;
   assign alert_rx[0].ping_n = 1'b1;
   assign alert_rx[0].ack_p  = 1'b0;
@@ -56,6 +59,10 @@ module aes_wrap
   assign alert_rx[1].ping_n = 1'b1;
   assign alert_rx[1].ack_p  = 1'b0;
   assign alert_rx[1].ack_n  = 1'b1;
+
+  // Alert transceivers
+  assign alert_recov_o = alert_tx[0].alert_p | ~alert_tx[0].alert_n;
+  assign alert_fatal_o = alert_tx[1].alert_p | ~alert_tx[1].alert_n;
 
   // Command integrity generation
   tlul_cmd_intg_gen tlul_cmd_intg_gen (
@@ -72,8 +79,8 @@ module aes_wrap
   // DUT
   aes #(
     .AES192Enable(AES192Enable),
-    .Masking(Masking),
-    .SBoxImpl(SBoxImpl)
+    .SecMasking(SecMasking),
+    .SecSBoxImpl(SecSBoxImpl)
   ) aes (
     .clk_i           (clk_i),
     .rst_ni          (rst_ni),
@@ -88,7 +95,7 @@ module aes_wrap
     .tl_i            (h2d_intg),
     .tl_o            (d2h),
     .alert_rx_i      (alert_rx),
-    .alert_tx_o      (unused_alert_tx)
+    .alert_tx_o      (alert_tx)
   );
 
   // FSM

@@ -405,9 +405,11 @@ class RegBlock:
                                 tags=[],
                                 swaccess=swaccess_obj,
                                 hwaccess=hwaccess_obj,
+                                hwqe=is_testreg,
                                 bits=signal.bits,
                                 resval=0,
-                                enum=None))
+                                enum=None,
+                                mubi=False))
 
         reg = Register(self.offset,
                        reg_name,

@@ -4,4 +4,7 @@
 
 `include "aon_timer_base_vseq.sv"
 `include "aon_timer_smoke_vseq.sv"
+`include "aon_timer_prescaler_vseq.sv"
+`include "aon_timer_jump_vseq.sv"
 `include "aon_timer_common_vseq.sv"
+`include "aon_timer_stress_all_vseq.sv"

@@ -95,7 +95,7 @@
     { name: "NumSramKeyReqSlots",
       desc: "Number of key slots",
       type: "int",
-      default: "2",
+      default: "3",
       local: "true"
     },
     { name: "OtpByteAddrWidth",
@@ -303,7 +303,7 @@
     { struct:  "sram_otp_key"
       // TODO: would be nice if this could accept parameters.
       // Split this out into an issue.
-      width:   "2"
+      width:   "3"
       type:    "req_rsp"
       name:    "sram_otp_key"
       act:     "rsp"
@@ -325,6 +325,21 @@
       act:     "req"
       default: "'0"
       package: "otp_ctrl_part_pkg"
+    }
+    // AST observability control
+    { struct: "ast_obs_ctrl",
+      type: "uni",
+      name: "obs_ctrl",
+      act: "rcv",
+      package: "ast_pkg"
+    }
+    // prim otp observe bus
+    { struct: "logic",
+      type: "uni",
+      name: "otp_obs",
+      act: "req",
+      width: "8",
+      package: ""
     }
   ] // inter_signal_list
 

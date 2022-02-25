@@ -3,10 +3,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "hw/top_earlgrey/sw/autogen/top_earlgrey_memory.h"
-#include "sram_ctrl_regs.h"
-#include "entropy_src_regs.h"
+#include "sw/device/lib/base/multibits_asm.h"
+#include "ast_regs.h"
 #include "csrng_regs.h"
 #include "edn_regs.h"
+#include "entropy_src_regs.h"
+#include "otp_ctrl_regs.h"
+#include "sensor_ctrl_regs.h"
+#include "sram_ctrl_regs.h"
 
 /**
  * Test ROM interrupt vectors.
@@ -134,9 +138,33 @@ _reset_start:
 _start:
   .globl _start
 
+  // Check if AST initialization should be skipped.
+  li   t0, (TOP_EARLGREY_OTP_CTRL_CORE_BASE_ADDR + \
+            OTP_CTRL_SW_CFG_WINDOW_REG_OFFSET + \
+            OTP_CTRL_PARAM_CREATOR_SW_CFG_AST_INIT_EN_OFFSET)
+  li   t1, MULTIBIT_ASM_BOOL4_TRUE
+  bne  t0, t1, .L_ast_init_skip
+
+  // Copy the AST configuration from OTP.
+  li   a0, (TOP_EARLGREY_AST_BASE_ADDR + AST_REGA_0_REG_OFFSET)
+  li   a1, (TOP_EARLGREY_AST_BASE_ADDR + AST_REGAL_REG_OFFSET + 4)
+  li   a2, (TOP_EARLGREY_OTP_CTRL_CORE_BASE_ADDR + \
+            OTP_CTRL_SW_CFG_WINDOW_REG_OFFSET + \
+            OTP_CTRL_PARAM_CREATOR_SW_CFG_AST_CFG_OFFSET)
+  call crt_section_copy
+
+  // Wait for AST initialization to complete.
+  li   a0, TOP_EARLGREY_SENSOR_CTRL_BASE_ADDR
+.L_ast_done_loop:
+  lw   t0, SENSOR_CTRL_STATUS_REG_OFFSET(a0)
+  srli t0, t0, SENSOR_CTRL_STATUS_AST_INIT_DONE_BIT // no-op as bit index is currently 0
+  andi t0, t0, 0x1
+  beqz t0, .L_ast_done_loop
+
+.L_ast_init_skip:
   // Enable entropy complex - this is not the full enable
   li   a0, TOP_EARLGREY_ENTROPY_SRC_BASE_ADDR
-  li   t0, 0x55505a
+  li   t0, 0x555055
   sw   t0, ENTROPY_SRC_CONF_REG_OFFSET(a0)
 
   li   a0, TOP_EARLGREY_ENTROPY_SRC_BASE_ADDR
@@ -150,6 +178,17 @@ _start:
   li   a0, TOP_EARLGREY_EDN0_BASE_ADDR
   li   t0, 0x55aa
   sw   t0, EDN_CTRL_REG_OFFSET(a0)
+
+  // Remove address space protections by configuring entry 15 as
+  // read-write-execute for the entire address space and then clearing
+  // all other entries.
+  li   t0, (0x9f << 24) // Locked NAPOT read-write-execute.
+  csrw pmpcfg3, t0
+  li   t0, -1           // NAPOT encoded region covering entire 32-bit address space.
+  csrw pmpaddr15, t0
+  csrw pmpcfg0, zero
+  csrw pmpcfg1, zero
+  csrw pmpcfg2, zero
 
   // Zero out the `.bss` segment.
   la   a0, _bss_start

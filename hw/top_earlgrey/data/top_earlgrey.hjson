@@ -370,7 +370,7 @@
       clock_srcs: {clk_i: "io_div4", clk_aon_i: "aon", clk_main_i: "main", clk_io_i: "io", clk_usb_i: "usb",
                    clk_io_div2_i: "io_div2", clk_io_div4_i: "io_div4"},
       clock_group: "powerup",
-      reset_connections: {rst_ni: "por_io_div4"},
+      reset_connections: {rst_ni: "por_io_div4"}
       domain: ["Aon"],
       base_addr: "0x40410000",
       attr: "templated",
@@ -568,8 +568,8 @@
       clock_group: "trans",
       reset_connections: {rst_ni: "sys", rst_edn_ni: "sys"},
       param_decl: {
-        Masking: "1",
-        SBoxImpl: "aes_pkg::SBoxImplDom"
+        SecMasking: "1",
+        SecSBoxImpl: "aes_pkg::SBoxImplDom"
       }
       base_addr: "0x41100000",
     },
@@ -691,6 +691,7 @@
                    WritebackStage: "1",
                    ICache: "1",
                    ICacheECC: "1",
+                   ICacheScramble: "1",
                    BranchPredictor: "0",
                    DbgTriggerEn: "1",
                    SecureIbex: "1",
@@ -705,9 +706,16 @@
           clock: "io_div4",
           group: "secure",
         }
+        clk_otp_i: {
+          clock: "io_div4",
+          group: "secure",
+        }
       },
       clock_group: "infra",
-      reset_connections: {rst_ni: "sys", rst_edn_ni: "sys", rst_esc_ni: "lc_io_div4"},
+      reset_connections: {rst_ni: "sys",
+                          rst_edn_ni: "sys",
+                          rst_esc_ni: "lc_io_div4",
+                          rst_otp_ni: "lc_io_div4"},
       base_addr: "0x411F0000",
     },
   ]
@@ -766,6 +774,15 @@
           // what the external module actually needs.
           act:     "rcv"
         }
+
+        { struct: "ast_obs_ctrl",
+          type: "uni",
+          name: "obs_ctrl",
+          // The activity direction for a port inter-signal is "opposite" of
+          // what the external module actually needs.
+          act:  "rcv",
+          package: "ast_pkg",
+        },
       ]
     },
   ]
@@ -778,6 +795,8 @@
   //  e.g flash_ctrl0.flash: [flash_phy0.flash_ctrl]
   inter_module: {
     'connect': {
+      'ast.obs_ctrl'            : ['flash_ctrl.obs_ctrl',
+                                   'otp_ctrl.obs_ctrl']
       'ast.ram_1p_cfg'          : ['otbn.ram_cfg',
                                    'sram_ctrl_main.cfg',
                                    'sram_ctrl_ret_aon.cfg',
@@ -803,7 +822,8 @@
       'flash_ctrl.rma_ack'      : ['lc_ctrl.lc_flash_rma_ack'],
       'flash_ctrl.rma_seed'     : ['lc_ctrl.lc_flash_rma_seed'],
       'otp_ctrl.sram_otp_key'   : ['sram_ctrl_main.sram_otp_key',
-                                   'sram_ctrl_ret_aon.sram_otp_key']
+                                   'sram_ctrl_ret_aon.sram_otp_key'
+                                   'rv_core_ibex.icache_otp_key']
       'pwrmgr_aon.pwr_flash'    : ['flash_ctrl.pwrmgr'],
       'pwrmgr_aon.pwr_rst'      : ['rstmgr_aon.pwr'],
       'pwrmgr_aon.pwr_clk'      : ['clkmgr_aon.pwr'],
@@ -974,6 +994,7 @@
         'adc_ctrl_aon.adc'                : 'adc'
         'ast.edn'                         : '',
         'ast.lc_dft_en'                   : '',
+        'ast.obs_ctrl'                    : 'obs_ctrl',
         'ast.ram_1p_cfg'                  : 'ram_1p_cfg',
         'ast.ram_2p_cfg'                  : 'ram_2p_cfg',
         'ast.rom_cfg'                     : 'rom_cfg',
@@ -988,7 +1009,8 @@
         'flash_ctrl.flash_power_down_h'   : 'flash_power_down_h',
         'flash_ctrl.flash_power_ready_h'  : 'flash_power_ready_h',
         'flash_ctrl.flash_test_mode_a'    : 'flash_test_mode_a',
-        'flash_ctrl.flash_test_voltage_h ': 'flash_test_voltage_h',
+        'flash_ctrl.flash_test_voltage_h' : 'flash_test_voltage_h',
+        'flash_ctrl.fla_obs'              : 'flash_obs',
         'entropy_src.entropy_src_rng'     : 'es_rng',
         'entropy_src.rng_fips'            : 'es_rng_fips',
         'peri.tl_ast'                     : 'ast_tl',
@@ -999,6 +1021,7 @@
         'otp_ctrl.otp_ast_pwr_seq_h'      : '',
         'otp_ctrl.otp_ext_voltage_h'      : 'otp_ext_voltage_h',
         'otp_ctrl.otp_alert'              : 'otp_alert',
+        'otp_ctrl.otp_obs'                : 'otp_obs',
         'rstmgr_aon.por_n'                : 'por_n'
         'sensor_ctrl.ast_alert'           : 'sensor_ctrl_ast_alert',
         'sensor_ctrl.ast_status'          : 'sensor_ctrl_ast_status',
@@ -1326,7 +1349,8 @@
           'FLASH_TEST_MODE0', 'FLASH_TEST_MODE1',
           'IOB10', 'IOB11', 'IOB12',
           'IOC0', 'IOC1', 'IOC12',
-          'IOR2', 'IOR3', 'IOR4', 'IOR5', 'IOR6', 'IOR7', 'IOR8', 'IOR9', 'IOR10', 'IOR11', 'IOR12', 'IOR13'
+          'IOR1', 'IOR2', 'IOR3', 'IOR4', 'IOR5', 'IOR6', 'IOR7', 'IOR8', 'IOR9', 'IOR10', 'IOR11', 'IOR12', 'IOR13',
+          'USB_P', 'USB_N'
         ],
 
         add_pads: [
@@ -1334,17 +1358,15 @@
           { name: 'IO_CLK',           type: 'InputStd', bank: 'VCC', connection: 'manual', desc: 'Extra clock input for FPGA target'}
           { name: 'IO_JSRST_N',       type: 'InputStd', bank: 'VCC', connection: 'manual', desc: 'Dedicated JTAG system reset input'}
           // Custom USB pads
-          { name: 'IO_USB_DNPULLUP0', type: 'BidirStd', bank: 'VCC', connection: 'manual', desc: 'Manual USB signal for FPGA target'}
-          { name: 'IO_USB_DPPULLUP0', type: 'BidirStd', bank: 'VCC', connection: 'manual', desc: 'Manual USB signal for FPGA target'}
-          { name: 'IO_UPHY_DP_TX',    type: 'BidirStd', bank: 'VCC', connection: 'manual', desc: 'Manual USB UPHY signal for FPGA target'}
-          { name: 'IO_UPHY_DN_TX',    type: 'BidirStd', bank: 'VCC', connection: 'manual', desc: 'Manual USB UPHY signal for FPGA target'}
-          { name: 'IO_UPHY_DP_RX',    type: 'BidirStd', bank: 'VCC', connection: 'manual', desc: 'Manual USB UPHY signal for FPGA target'}
-          { name: 'IO_UPHY_DN_RX',    type: 'BidirStd', bank: 'VCC', connection: 'manual', desc: 'Manual USB UPHY signal for FPGA target'}
-          { name: 'IO_UPHY_D_RX',     type: 'BidirStd', bank: 'VCC', connection: 'manual', desc: 'Manual USB UPHY signal for FPGA target'}
-          { name: 'IO_UPHY_OE_N',     type: 'BidirStd', bank: 'VCC', connection: 'manual', desc: 'Manual USB UPHY signal for FPGA target'}
-          { name: 'IO_UPHY_DPPULLUP', type: 'BidirStd', bank: 'VCC', connection: 'manual', desc: 'Manual USB UPHY signal for FPGA target'}
-          { name: 'IO_UPHY_SPD',      type: 'BidirStd', bank: 'VCC', connection: 'manual', desc: 'Manual USB UPHY signal for FPGA target'}
-          { name: 'IO_UPHY_SUS',      type: 'BidirStd', bank: 'VCC', connection: 'manual', desc: 'Manual USB UPHY signal for FPGA target'}
+          { name: 'IO_USB_CONNECT',  type: 'BidirStd', bank: 'VCC', connection: 'manual', desc: 'Manual USB UPHY signal for FPGA target'}
+          { name: 'IO_USB_DP_TX',    type: 'BidirStd', bank: 'VCC', connection: 'manual', desc: 'Manual USB UPHY signal for FPGA target'}
+          { name: 'IO_USB_DN_TX',    type: 'BidirStd', bank: 'VCC', connection: 'manual', desc: 'Manual USB UPHY signal for FPGA target'}
+          { name: 'IO_USB_D_RX',     type: 'BidirStd', bank: 'VCC', connection: 'manual', desc: 'Manual USB UPHY signal for FPGA target'}
+          { name: 'IO_USB_DP_RX',    type: 'BidirStd', bank: 'VCC', connection: 'manual', desc: 'Manual USB UPHY signal for FPGA target'}
+          { name: 'IO_USB_DN_RX',    type: 'BidirStd', bank: 'VCC', connection: 'manual', desc: 'Manual USB UPHY signal for FPGA target'}
+          { name: 'IO_USB_OE_N',     type: 'BidirStd', bank: 'VCC', connection: 'manual', desc: 'Manual USB UPHY signal for FPGA target'}
+          { name: 'IO_USB_SPEED',    type: 'BidirStd', bank: 'VCC', connection: 'manual', desc: 'Manual USB UPHY signal for FPGA target'}
+          { name: 'IO_USB_SUSPEND',  type: 'BidirStd', bank: 'VCC', connection: 'manual', desc: 'Manual USB UPHY signal for FPGA target'}
           // ChipWhisperer IO
           { name: 'IO_CLKOUT',        type: 'BidirStd', bank: 'VCC', connection: 'manual', desc: 'Manual clock output for SCA setup'}
           { name: 'IO_TRIGGER',       type: 'BidirStd', bank: 'VCC', connection: 'manual', desc: 'Manual trigger output for SCA setup'}

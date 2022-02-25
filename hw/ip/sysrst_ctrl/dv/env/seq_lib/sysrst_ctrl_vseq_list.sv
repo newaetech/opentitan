@@ -9,4 +9,7 @@
 `include "sysrst_ctrl_combo_detect_ec_rst_vseq.sv"
 `include "sysrst_ctrl_pin_access_vseq.sv"
 `include "sysrst_ctrl_pin_override_vseq.sv"
+`include "sysrst_ctrl_flash_wr_prot_vseq.sv"
+`include "sysrst_ctrl_ec_pwr_on_rst_vseq.sv"
+
 

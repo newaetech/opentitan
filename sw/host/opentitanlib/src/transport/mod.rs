@@ -2,23 +2,27 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::{anyhow, Result};
 use bitflags::bitflags;
 use erased_serde::Serialize;
 use std::any::Any;
 use std::path::PathBuf;
 use std::rc::Rc;
-use thiserror::Error;
 
 use crate::io::gpio::GpioPin;
 use crate::io::i2c::Bus;
 use crate::io::spi::Target;
 use crate::io::uart::Uart;
 
+pub mod common;
 pub mod cw310;
 pub mod hyperdebug;
+pub mod proxy;
 pub mod ultradebug;
 pub mod verilator;
+
+// Export custom error types
+mod errors;
+pub use errors::{Result, TransportError, TransportInterfaceType, WrapInTransportError};
 
 bitflags! {
     /// A bitmap of capabilities which may be provided by a transport.
@@ -54,9 +58,9 @@ impl Capabilities {
     }
 
     /// Checks that the requested capabilities are provided.
-    pub fn ok(&self) -> Result<()> {
+    pub fn ok(&self) -> anyhow::Result<()> {
         if self.capabilities & self.needed != self.needed {
-            Err(anyhow!(
+            Err(anyhow::anyhow!(
                 "Requested capabilities {:?}, but capabilities {:?} are supplied",
                 self.needed,
                 self.capabilities
@@ -65,15 +69,6 @@ impl Capabilities {
             Ok(())
         }
     }
-}
-
-/// Errors related to the SPI interface and SPI transactions.
-#[derive(Error, Debug)]
-pub enum TransportError {
-    #[error("This transport does not support {0} instance {1}")]
-    InvalidInstance(&'static str, String),
-    #[error("This transport does not support the requested operation")]
-    UnsupportedOperation,
 }
 
 /// A transport object is a factory for the low-level interfaces provided
@@ -85,23 +80,23 @@ pub trait Transport {
 
     /// Returns a SPI [`Target`] implementation.
     fn spi(&self, _instance: &str) -> Result<Rc<dyn Target>> {
-        unimplemented!();
+        Err(TransportError::InvalidInterface(TransportInterfaceType::Spi))
     }
     /// Returns a I2C [`Bus`] implementation.
     fn i2c(&self, _instance: &str) -> Result<Rc<dyn Bus>> {
-        unimplemented!();
+        Err(TransportError::InvalidInterface(TransportInterfaceType::I2c))
     }
     /// Returns a [`Uart`] implementation.
     fn uart(&self, _instance: &str) -> Result<Rc<dyn Uart>> {
-        unimplemented!();
+        Err(TransportError::InvalidInterface(TransportInterfaceType::Uart))
     }
     /// Returns a [`GpioPin`] implementation.
     fn gpio_pin(&self, _instance: &str) -> Result<Rc<dyn GpioPin>> {
-        unimplemented!();
+        Err(TransportError::InvalidInterface(TransportInterfaceType::Gpio))
     }
     /// Invoke non-standard functionality of some Transport implementations.
     fn dispatch(&self, _action: &dyn Any) -> Result<Option<Box<dyn Serialize>>> {
-        Err(TransportError::UnsupportedOperation.into())
+        Err(TransportError::UnsupportedOperation)
     }
 }
 
@@ -128,14 +123,14 @@ pub mod tests {
     use super::*;
 
     #[test]
-    fn test_capabilities_met() -> Result<()> {
+    fn test_capabilities_met() -> anyhow::Result<()> {
         let mut cap = Capabilities::new(Capability::UART | Capability::SPI);
         assert!(cap.request(Capability::UART).ok().is_ok());
         Ok(())
     }
 
     #[test]
-    fn test_capabilities_not_met() -> Result<()> {
+    fn test_capabilities_not_met() -> anyhow::Result<()> {
         let mut cap = Capabilities::new(Capability::UART | Capability::SPI);
         assert!(cap.request(Capability::GPIO).ok().is_err());
         Ok(())

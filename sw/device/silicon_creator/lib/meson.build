@@ -4,6 +4,19 @@
 subdir('base')
 subdir('drivers')
 
+# Logging library.
+sw_silicon_creator_lib_log = declare_dependency(
+  link_with: static_library(
+    'sw_silicon_creator_lib_log',
+    sources: [
+      'log.c',
+    ],
+    dependencies: [
+      sw_silicon_creator_lib_driver_uart,
+    ],
+  ),
+)
+
 # Otbn utilities.
 sw_silicon_creator_lib_otbn_util = declare_dependency(
   link_with: static_library(
@@ -106,6 +119,8 @@ sw_silicon_creator_lib_shutdown = declare_dependency(
       hw_ip_sram_ctrl_reg_h,
       hw_ip_flash_ctrl_reg_h,
       hw_ip_ibex_reg_h,
+      hw_ip_rstmgr_reg_h,
+      hw_ip_uart_reg_h,
       'shutdown.c',
     ],
     dependencies: [
@@ -122,6 +137,9 @@ sw_silicon_creator_lib_epmp = declare_dependency(
     'sw_silicon_creator_lib_epmp',
     sources: [
       'epmp.c',
+    ],
+    dependencies: [
+      sw_lib_hardened,
     ],
   ),
 )
@@ -151,19 +169,6 @@ sw_silicon_creator_lib_irq_asm = declare_dependency(
   ),
 )
 
-# Logging library.
-sw_silicon_creator_lib_log = declare_dependency(
-  link_with: static_library(
-    'sw_silicon_creator_lib_log',
-    sources: [
-      'log.c',
-    ],
-    dependencies: [
-      sw_silicon_creator_lib_driver_uart,
-    ],
-  ),
-)
-
 test('sw_silicon_creator_lib_shutdown_unittest', executable(
     'sw_silicon_creator_lib_shutdown_unittest',
     sources: [
@@ -174,12 +179,14 @@ test('sw_silicon_creator_lib_shutdown_unittest', executable(
       hw_ip_sram_ctrl_reg_h,
       hw_ip_flash_ctrl_reg_h,
       hw_ip_ibex_reg_h,
+      hw_ip_rstmgr_reg_h,
+      hw_ip_uart_reg_h,
       'shutdown.c',
       'shutdown_unittest.cc',
     ],
     dependencies: [
       sw_vendor_gtest,
-      sw_silicon_creator_lib_base_mock_abs_mmio,
+      sw_lib_testing_mock_abs_mmio,
       sw_lib_testing_hardened,
     ],
     native: true,
@@ -260,10 +267,11 @@ test('sw_silicon_creator_lib_epmp_unittest', executable(
       sw_vendor_gtest,
       sw_silicon_creator_lib_base_mock_csr,
       sw_lib_testing_bitfield,
+      sw_lib_testing_hardened,
     ],
     native: true,
-    c_args: ['-DMOCK_CSR'],
-    cpp_args: ['-DMOCK_CSR'],
+    c_args: ['-DMOCK_CSR', '-DOT_OFF_TARGET_TEST'],
+    cpp_args: ['-DMOCK_CSR', '-DOT_OFF_TARGET_TEST'],
     ),
   suite: 'mask_rom',
 )

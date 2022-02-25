@@ -6,11 +6,13 @@
 //
 // This module controls the interplay of input/output registers and the AES cipher core.
 
+`include "prim_assert.sv"
+
 module aes_control
   import aes_pkg::*;
   import aes_reg_pkg::*;
 #(
-  parameter bit          Masking              = 0,
+  parameter bit          SecMasking           = 0,
   parameter int unsigned SecStartTriggerDelay = 0
 ) (
   input  logic                      clk_i,
@@ -117,6 +119,10 @@ module aes_control
 
   // Optional delay of manual start trigger
   logic start_trigger;
+
+  // Create a lint error to reduce the risk of accidentally enabling this feature.
+  `ASSERT_STATIC_LINT_ERROR(AesSecStartTriggerDelayNonDefault, SecStartTriggerDelay == 0)
+
   if (SecStartTriggerDelay > 0) begin : gen_start_delay
     // Delay the manual start trigger input for SCA measurements.
     localparam int unsigned WidthCounter = $clog2(SecStartTriggerDelay+1);
@@ -134,10 +140,6 @@ module aes_control
         count_q <= count_d;
       end
     end
-
-    // Create a lint error to reduce the risk of accidentally enabling this feature.
-    logic sec_start_trigger_delay;
-    assign sec_start_trigger_delay = count_q[0];
 
   end else begin : gen_no_start_delay
     // Directly forward the manual start trigger input.
@@ -245,7 +247,7 @@ module aes_control
   for (genvar i = 0; i < Sp2VWidth; i++) begin : gen_fsm
     if (SP2V_LOGIC_HIGH[i] == 1'b1) begin : gen_fsm_p
       aes_control_fsm_p #(
-        .Masking ( Masking )
+        .SecMasking ( SecMasking )
       ) u_aes_control_fsm_i (
         .clk_i                     ( clk_i                         ),
         .rst_ni                    ( rst_ni                        ),
@@ -336,7 +338,7 @@ module aes_control
       );
     end else begin : gen_fsm_n
       aes_control_fsm_n #(
-        .Masking ( Masking )
+        .SecMasking ( SecMasking )
       ) u_aes_control_fsm_i (
         .clk_i                     ( clk_i                         ),
         .rst_ni                    ( rst_ni                        ),
@@ -532,11 +534,15 @@ module aes_control
     assign sp2v_sig[5+i] = ctr_we_i[i];
   end
 
+  // All signals inside sp2v_sig are driven and consumed by multi-rail FSMs.
+  localparam bit [NumSp2VSig-1:0] Sp2VEnSecBuf = '0;
+
   // Individually check sparsely encoded signals.
   for (genvar i = 0; i < NumSp2VSig; i++) begin : gen_sel_buf_chk
     aes_sel_buf_chk #(
-      .Num   ( Sp2VNum   ),
-      .Width ( Sp2VWidth )
+      .Num      ( Sp2VNum         ),
+      .Width    ( Sp2VWidth       ),
+      .EnSecBuf ( Sp2VEnSecBuf[i] )
     ) u_aes_sp2v_sig_buf_chk_i (
       .clk_i  ( clk_i               ),
       .rst_ni ( rst_ni              ),

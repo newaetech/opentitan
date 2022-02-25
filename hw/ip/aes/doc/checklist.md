@@ -75,10 +75,10 @@ Security      | [SEC_RND_CNST][]        | Done        |
 
  Type         | Item                         | Resolution  | Note/Collaterals
 --------------|------------------------------|-------------|------------------
-Security      | [SEC_CM_ASSETS_LISTED][]     | Not Started |
+Security      | [SEC_CM_ASSETS_LISTED][]     | Done        |
 Security      | [SEC_CM_IMPLEMENTED][]       | Done        | Datapath FI hardening in progress (not strictly required)
-Security      | [SEC_CM_RTL_REVIEWED][]      | Not Started |
-Security      | [SEC_CM_COUNCIL_REVIEWED][]  | Not Started |
+Security      | [SEC_CM_RTL_REVIEWED][]      | Done        |
+Security      | [SEC_CM_COUNCIL_REVIEWED][]  | Done        |
 
 [SEC_CM_ASSETS_LISTED]:    {{<relref "/doc/project/checklist.md#sec_cm_assets_listed" >}}
 [SEC_CM_IMPLEMENTED]:      {{<relref "/doc/project/checklist.md#sec_cm_implemented" >}}
@@ -222,11 +222,15 @@ Review        | [V3_CHECKLIST_SCOPED][]                 | Not Started |
 
  Type         | Item                                    | Resolution  | Note/Collaterals
 --------------|-----------------------------------------|-------------|------------------
+Documentation | [SEC_CM_TESTPLAN_COMPLETED][]           | Not Started |
 Tests         | [FPV_SEC_CM_VERIFIED][]                 | Not Started |
 Tests         | [SIM_SEC_CM_VERIFIED][]                 | Not Started |
- 
+Review        | [SEC_CM_DV_REVIEWED][]                  | Not Started |
+
+[SEC_CM_TESTPLAN_COMPLETED]:          {{<relref "/doc/project/checklist.md#sec_cm_testplan_completed" >}}
 [FPV_SEC_CM_VERIFIED]:                {{<relref "/doc/project/checklist.md#fpv_sec_cm_verified" >}}
 [SIM_SEC_CM_VERIFIED]:                {{<relref "/doc/project/checklist.md#sim_sec_cm_verified" >}}
+[SEC_CM_DV_REVIEWED]:                 {{<relref "/doc/project/checklist.md#sec_cm_dv_reviewed" >}}
 
 ### V3
 

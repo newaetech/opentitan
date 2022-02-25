@@ -276,8 +276,8 @@ typedef struct dif_flash_ctrl_transaction {
    */
   uint32_t byte_address;
   /**
-   * Number of 32-bit words to program. Must be in the range [1,4096]
-   * (inclusive).
+   * Number of 32-bit words in the operation. Must be in the range [1,4096]
+   * (inclusive) for program or read operations. Unused for erase operations.
    */
   uint32_t word_count;
 } dif_flash_ctrl_transaction_t;
@@ -557,7 +557,8 @@ typedef struct dif_flash_ctrl_output {
 
 /**
  * Check that the transaction has completed and return any resulting error
- * codes. Does not clear the error codes.
+ * codes. Does not clear the error codes, but does clear the operation status if
+ * the operation has terminated.
  *
  * @param handle flash controller device for completing the transaction.
  * @param out Out parameter. Contains the transaction status and error codes.

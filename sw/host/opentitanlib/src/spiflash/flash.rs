@@ -134,7 +134,8 @@ impl SpiFlash {
     /// Send the WRITE_ENABLE opcode to the `spi` target.
     pub fn set_write_enable(spi: &dyn Target) -> Result<()> {
         let wren = [SpiFlash::WRITE_ENABLE];
-        spi.run_transaction(&mut [Transfer::Write(&wren)])
+        spi.run_transaction(&mut [Transfer::Write(&wren)])?;
+        Ok(())
     }
 
     /// Read and parse the SFDP table from the `spi` target.
@@ -221,7 +222,7 @@ impl SpiFlash {
         progress: impl Fn(u32, u32),
     ) -> Result<()> {
         // Break the read up according to the maximum chunksize the backend can handle.
-        for chunk in buffer.chunks_mut(spi.max_chunk_size()) {
+        for chunk in buffer.chunks_mut(spi.max_chunk_size()?) {
             let op_addr = self.opcode_with_address(SpiFlash::READ, address)?;
             spi.run_transaction(&mut [Transfer::Write(&op_addr), Transfer::Read(chunk)])?;
             address += chunk.len() as u32;

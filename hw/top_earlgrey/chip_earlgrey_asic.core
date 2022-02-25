@@ -44,8 +44,9 @@ parameters:
   SYNTHESIS:
     datatype: bool
     paramtype: vlogdefine
-  AST_BYPASS_CLK:
+  IBEX_CUSTOM_PMP_RESET_VALUES:
     datatype: bool
+    default: true
     paramtype: vlogdefine
 
 targets:
@@ -56,13 +57,14 @@ targets:
       - tool_veriblelint ? (files_veriblelint_waiver)
       - files_rtl
     toplevel: chip_earlgrey_asic
+    parameters:
+      - IBEX_CUSTOM_PMP_RESET_VALUES
 
   lint:
     <<: *default_target
     default_tool: verilator
     parameters:
       - SYNTHESIS=true
-      - AST_BYPASS_CLK=true
     tools:
       verilator:
         mode: lint-only
@@ -77,7 +79,6 @@ targets:
     default_tool: icarus
     parameters:
       - SYNTHESIS=true
-      - AST_BYPASS_CLK=true
     toplevel: chip_earlgrey_asic
 
   formal:

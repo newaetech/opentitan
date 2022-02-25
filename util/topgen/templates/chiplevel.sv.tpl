@@ -400,11 +400,92 @@ module chip_${top["name"]}_${target["name"]} (
   };
 
 % endif
+###################################################################
+## USB for CW310                                                 ##
+###################################################################
+% if target["name"] == "cw310":
+  // TODO: generalize this USB mux code and align with other tops.
 
+  // Only use the UPHY on CW310, which does not support pin flipping.
+
+  // DioUsbdevDn
+  assign manual_attr_io_usb_dn_tx = '0;
+  assign manual_out_io_usb_dn_tx = dio_out[DioUsbdevDn];
+  assign manual_oe_io_usb_dn_tx = dio_oe[DioUsbdevDn];
+  assign dio_in[DioUsbdevDn] = manual_in_io_usb_dn_rx;
+  // DioUsbdevDp
+  assign manual_attr_io_usb_dp_tx = '0;
+  assign manual_out_io_usb_dp_tx = dio_out[DioUsbdevDp];
+  assign manual_oe_io_usb_dp_tx = dio_oe[DioUsbdevDp];
+  assign dio_in[DioUsbdevDp] = manual_in_io_usb_dp_rx;
+
+  assign manual_attr_io_usb_oe_n = '0;
+  assign manual_out_io_usb_oe_n = ~dio_oe[DioUsbdevDp];
+  assign manual_oe_io_usb_oe_n = 1'b1;
+
+  logic unused_in_io_usb_oe_n;
+  assign unused_in_io_usb_oe_n = manual_in_io_usb_oe_n;
+
+  // DioUsbdevD
+  assign manual_attr_io_usb_d_rx = '0;
+  assign dio_in[DioUsbdevD] = manual_in_io_usb_d_rx;
+
+  // DioUsbdevDpPullup
+  assign manual_attr_io_usb_connect = '0;
+  assign manual_out_io_usb_connect = dio_out[DioUsbdevDpPullup] &
+                                     dio_oe[DioUsbdevDpPullup];
+  assign manual_oe_io_usb_connect = 1'b1;
+  assign dio_in[DioUsbdevDpPullup] = manual_in_io_usb_connect;
+
+  // Set SPD to full-speed
+  assign manual_out_io_usb_speed = 1'b1;
+  assign manual_oe_io_usb_speed = 1'b1;
+
+  logic unused_in_io_usb_speed;
+  assign unused_in_io_usb_speed = manual_in_io_usb_speed;
+
+  // TUSB1106 low-power mode
+  assign manual_out_io_usb_suspend = dio_out[DioUsbdevSuspend];
+  assign manual_oe_io_usb_suspend = 1'b1;
+  assign dio_in[DioUsbdevSuspend] = manual_in_io_usb_suspend;
+
+  // Tie-off unused signals
+  assign dio_in[DioUsbdevDnPullup] = 1'b0;
+  assign dio_in[DioUsbdevSe0] = 1'b0;
+  assign dio_in[DioUsbdevTxModeSe] = 1'b0;
+
+  logic unused_usb_sigs;
+  assign unused_usb_sigs = ^{
+    // DN pull-up
+    dio_out[DioUsbdevDnPullup],
+    dio_oe[DioUsbdevDnPullup],
+    dio_attr[DioUsbdevDnPullup],
+    // SE0
+    dio_out[DioUsbdevSe0],
+    dio_oe[DioUsbdevSe0],
+    dio_attr[DioUsbdevSe0],
+    // TX Mode
+    dio_out[DioUsbdevTxModeSe],
+    dio_oe[DioUsbdevTxModeSe],
+    dio_attr[DioUsbdevTxModeSe],
+    // Suspend
+    dio_oe[DioUsbdevSuspend],
+    dio_attr[DioUsbdevSuspend],
+    // D is used as an input only
+    dio_out[DioUsbdevD],
+    dio_oe[DioUsbdevD],
+    dio_attr[DioUsbdevD],
+    // DP and DN are broken out into multiple unidirectional pins
+    dio_attr[DioUsbdevDp],
+    dio_attr[DioUsbdevDn]
+  };
+
+% endif
+
+% if target["name"] == "nexysvideo":
 ###################################################################
-## USB for CW310 and Nexysvideo                                  ##
+## USB for Nexysvideo                                            ##
 ###################################################################
-% if target["name"] in ["cw310", "nexysvideo"]:
 
   /////////////////////
   // USB Overlay Mux //
@@ -517,21 +598,6 @@ module chip_${top["name"]}_${target["name"]} (
   assign unused_in_io_uphy_oe_n = manual_in_io_uphy_oe_n;
 
 % endif
-% if target["name"] == "cw310":
-  // Set SPD to full-speed
-  assign manual_oe_io_uphy_spd = 1'b1;
-  assign manual_out_io_uphy_spd = 1'b1;
-
-  logic unused_in_io_uphy_spd;
-  assign unused_in_io_uphy_spd = manual_in_io_uphy_spd;
-
-  // Disable TUSB1106 low-power mode (for now?)
-  assign manual_oe_io_uphy_sus = 1'b1;
-  assign manual_out_io_uphy_sus = 1'b0;
-
-  logic unused_in_io_uphy_sus;
-  assign unused_in_io_uphy_sus = manual_in_io_uphy_sus;
-% endif
 
 ###################################################################
 ## AST For all targets                                           ##
@@ -562,6 +628,11 @@ module chip_${top["name"]}_${target["name"]} (
 
   // monitored clock
   logic sck_monitor;
+
+  // observe interface
+  logic [7:0] fla_obs;
+  logic [7:0] otp_obs;
+  ast_pkg::ast_obs_ctrl_t obs_ctrl;
 
   // otp power sequence
   otp_ctrl_pkg::otp_ast_req_t otp_ctrl_otp_ast_pwr_seq;
@@ -705,6 +776,7 @@ module chip_${top["name"]}_${target["name"]} (
   ast_pkg::ast_dif_t flash_alert;
   ast_pkg::ast_dif_t otp_alert;
   logic ast_init_done;
+  logic usb_diff_rx_obs;
 
 % else:
   // TODO: Hook this up when FPGA pads are updated
@@ -825,6 +897,7 @@ module chip_${top["name"]}_${target["name"]} (
     .clk_src_io_en_i       ( base_ast_pwr.io_clk_en ),
     .clk_src_io_o          ( ast_base_clks.clk_io ),
     .clk_src_io_val_o      ( ast_base_pwr.io_clk_val ),
+    .clk_src_io_48m_o      (  ),
     // usb source clock
     .usb_ref_pulse_i       ( usb_ref_pulse ),
     .usb_ref_val_i         ( usb_ref_val ),
@@ -852,10 +925,11 @@ module chip_${top["name"]}_${target["name"]} (
     // dft
     .dft_strap_test_i      ( dft_strap_test   ),
     .lc_dft_en_i           ( dft_en           ),
-    .fla_obs_i             ( '0 ),
-    .otp_obs_i             ( '0 ),
+    .fla_obs_i             ( fla_obs ),
+    .otp_obs_i             ( otp_obs ),
     .otm_obs_i             ( '0 ),
-    .obs_ctrl_o            (  ),
+    .usb_obs_i             ( usb_diff_rx_obs ),
+    .obs_ctrl_o            ( obs_ctrl ),
     // pinmux related
     .padmux2ast_i          ( pad2ast    ),
     .ast2padmux_o          ( ast2pinmux ),
@@ -963,14 +1037,15 @@ module chip_${top["name"]}_${target["name"]} (
   prim_usb_diff_rx #(
     .CalibW(ast_pkg::UsbCalibWidth)
   ) u_prim_usb_diff_rx (
-    .input_pi      ( USB_P                 ),
-    .input_ni      ( USB_N                 ),
-    .input_en_i    ( usb_rx_enable         ),
-    .core_pok_h_i  ( ast_pwst_h.aon_pok    ),
-    .pullup_p_en_i ( usb_pullup_p_en       ),
-    .pullup_n_en_i ( usb_pullup_n_en       ),
-    .calibration_i ( usb_io_pu_cal         ),
-    .input_o       ( dio_in[DioUsbdevD]    )
+    .input_pi          ( USB_P                 ),
+    .input_ni          ( USB_N                 ),
+    .input_en_i        ( usb_rx_enable         ),
+    .core_pok_h_i      ( ast_pwst_h.aon_pok    ),
+    .pullup_p_en_i     ( usb_pullup_p_en       ),
+    .pullup_n_en_i     ( usb_pullup_n_en       ),
+    .calibration_i     ( usb_io_pu_cal         ),
+    .usb_diff_rx_obs_o ( usb_diff_rx_obs       ),
+    .input_o           ( dio_in[DioUsbdevD]    )
   );
 
   // Tie-off unused signals
@@ -1041,13 +1116,16 @@ module chip_${top["name"]}_${target["name"]} (
     .adc_rsp_i                    ( adc_rsp                    ),
     .ast_edn_req_i                ( ast_edn_edn_req            ),
     .ast_edn_rsp_o                ( ast_edn_edn_rsp            ),
+    .obs_ctrl_i                   ( obs_ctrl                   ),
     .otp_ctrl_otp_ast_pwr_seq_o   ( otp_ctrl_otp_ast_pwr_seq   ),
     .otp_ctrl_otp_ast_pwr_seq_h_i ( otp_ctrl_otp_ast_pwr_seq_h ),
     .otp_alert_o                  ( otp_alert                  ),
+    .otp_obs_o                    ( otp_obs                    ),
     .flash_bist_enable_i          ( flash_bist_enable          ),
     .flash_power_down_h_i         ( flash_power_down_h         ),
     .flash_power_ready_h_i        ( flash_power_ready_h        ),
     .flash_alert_o                ( flash_alert                ),
+    .flash_obs_o                  ( fla_obs                    ),
     .es_rng_req_o                 ( es_rng_req                 ),
     .es_rng_rsp_i                 ( es_rng_rsp                 ),
     .es_rng_fips_o                ( es_rng_fips                ),
@@ -1111,6 +1189,11 @@ module chip_${top["name"]}_${target["name"]} (
   assign manual_out_io_jsrst_n = 1'b0;
   assign manual_oe_io_jsrst_n = 1'b0;
 
+  % if target["name"] == "cw305":
+  // TODO: follow-up later and hardwire all ast connects that do not
+  //       exist for this target
+  assign otp_obs_o = '0;
+  % endif
 
   //////////////////////
   // Top-level design //
@@ -1126,8 +1209,8 @@ module chip_${top["name"]}_${target["name"]} (
 // otherwise Verilator / FPGA will hang.
   top_${top["name"]} #(
 % if target["name"] == "cw310":
-    .AesMasking(1'b1),
-    .AesSBoxImpl(aes_pkg::SBoxImplDom),
+    .SecAesMasking(1'b1),
+    .SecAesSBoxImpl(aes_pkg::SBoxImplDom),
     .SecAesStartTriggerDelay(40),
     .SecAesAllowForcingMasks(1'b1),
     .SecAesSkipPRNGReseeding(1'b1),
@@ -1139,8 +1222,8 @@ module chip_${top["name"]}_${target["name"]} (
     .OtbnRegFile(otbn_pkg::RegFileFPGA),
     .OtpCtrlMemInitFile(OtpCtrlMemInitFile),
 % elif target["name"] == "cw305":
-    .AesMasking(1'b1),
-    .AesSBoxImpl(aes_pkg::SBoxImplDom),
+    .SecAesMasking(1'b1),
+    .SecAesSBoxImpl(aes_pkg::SBoxImplDom),
     .SecAesStartTriggerDelay(40),
     .SecAesAllowForcingMasks(1'b1),
     .SecAesSkipPRNGReseeding(1'b1),
@@ -1149,8 +1232,8 @@ module chip_${top["name"]}_${target["name"]} (
     .RvCoreIbexBranchTargetALU(0),
     .RvCoreIbexWritebackStage(0),
 % else:
-    .AesMasking(1'b0),
-    .AesSBoxImpl(aes_pkg::SBoxImplLut),
+    .SecAesMasking(1'b0),
+    .SecAesSBoxImpl(aes_pkg::SBoxImplLut),
     .KmacEnMasking(1'b0),
     .KeymgrKmacEnMasking(0),
     .SecAesStartTriggerDelay(0),
@@ -1185,9 +1268,11 @@ module chip_${top["name"]}_${target["name"]} (
     .usbdev_usb_ref_pulse_o       ( usb_ref_pulse         ),
     .ast_edn_req_i                ( ast_edn_edn_req       ),
     .ast_edn_rsp_o                ( ast_edn_edn_rsp       ),
+    .obs_ctrl_i                   ( obs_ctrl              ),
     .flash_bist_enable_i          ( flash_bist_enable     ),
     .flash_power_down_h_i         ( 1'b0                  ),
     .flash_power_ready_h_i        ( 1'b1                  ),
+    .flash_obs_o                  ( flash_obs             ),
     .io_clk_byp_req_o             ( io_clk_byp_req        ),
     .io_clk_byp_ack_i             ( io_clk_byp_ack        ),
     .all_clk_byp_req_o            ( all_clk_byp_req       ),
@@ -1202,6 +1287,7 @@ module chip_${top["name"]}_${target["name"]} (
     .otp_ctrl_otp_ast_pwr_seq_o   ( otp_ctrl_otp_ast_pwr_seq   ),
     .otp_ctrl_otp_ast_pwr_seq_h_i ( otp_ctrl_otp_ast_pwr_seq_h ),
     .otp_alert_o                  ( otp_alert                  ),
+    .otp_obs_o                    ( otp_obs                    ),
     .sensor_ctrl_ast_alert_req_i  ( ast_alert_req              ),
     .sensor_ctrl_ast_alert_rsp_o  ( ast_alert_rsp              ),
     .sensor_ctrl_ast_status_i     ( ast_pwst.io_pok            ),

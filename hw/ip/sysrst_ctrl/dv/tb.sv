@@ -53,6 +53,7 @@ module tb;
     .alert_tx_o       (alert_tx),
     .cio_ac_present_i (sysrst_ctrl_if.ac_present),
     .cio_ec_rst_l_i   (sysrst_ctrl_if.ec_rst_l_in),
+    .cio_flash_wp_l_i (sysrst_ctrl_if.flash_wp_l_in),
     .cio_key0_in_i    (sysrst_ctrl_if.key0_in),
     .cio_key1_in_i    (sysrst_ctrl_if.key1_in),
     .cio_key2_in_i    (sysrst_ctrl_if.key2_in),
@@ -81,5 +82,8 @@ module tb;
     $timeformat(-12, 0, " ps", 12);
     run_test();
   end
+
+  `ASSERT(CheckFlashWrProtRst, !rst_aon_n -> sysrst_ctrl_if.flash_wp_l == 0, clk_aon, 0)
+  `ASSERT(CheckEcPwrOnRst, !rst_aon_n -> sysrst_ctrl_if.ec_rst_l_out == 0, clk_aon, 0)
 
 endmodule

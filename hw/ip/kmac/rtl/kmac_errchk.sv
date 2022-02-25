@@ -41,6 +41,8 @@
 // 2. Kmac Prefix
 // * sideload & key_valid -> Checker in kmac_core
 
+`include "prim_assert.sv"
+
 module kmac_errchk
   import kmac_pkg::*;
   import sha3_pkg::sha3_mode_e;
@@ -153,6 +155,7 @@ module kmac_errchk
 
   // SW sequence Error
   // info field: Current state, Received command
+  // SEC_CM: FSM.SPARSE
   always_comb begin
     err_swsequence = 1'b 0;
     sparse_fsm_error_o = 1'b 0;

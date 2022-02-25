@@ -6,6 +6,7 @@
 //
 //
 
+`include "prim_assert.sv"
 
 module usbdev
   import usbdev_pkg::*;
@@ -77,7 +78,7 @@ module usbdev
   // Interrupts
   output logic       intr_pkt_received_o, // Packet received
   output logic       intr_pkt_sent_o, // Packet sent
-  output logic       intr_connected_o,
+  output logic       intr_powered_o,
   output logic       intr_disconnected_o,
   output logic       intr_host_lost_o,
   output logic       intr_link_reset_o,
@@ -138,7 +139,7 @@ module usbdev
   logic              usb_event_av_empty, event_av_overflow, usb_event_rx_full;
   logic              event_av_empty, event_rx_full;
   logic              usb_event_link_reset, usb_event_link_suspend, usb_event_link_resume;
-  logic              usb_event_host_lost, usb_event_disconnect, usb_event_connect;
+  logic              usb_event_host_lost, usb_event_disconnect, usb_event_powered;
   logic              usb_event_rx_crc_err, usb_event_rx_pid_err;
   logic              usb_event_rx_bitstuff_err;
   logic              usb_event_in_err;
@@ -147,7 +148,7 @@ module usbdev
   logic              usb_link_active;
 
   logic              event_link_reset, event_link_suspend, event_link_resume;
-  logic              event_host_lost, event_disconnect, event_connect;
+  logic              event_host_lost, event_disconnect, event_powered;
   logic              event_rx_crc_err, event_rx_pid_err;
   logic              event_rx_bitstuff_err;
   logic              event_in_err;
@@ -159,6 +160,7 @@ module usbdev
   logic [2:0]        usb_link_state;
   logic              usb_enable;
   logic [6:0]        usb_device_addr;
+  logic              usb_resume_link_active;
 
   logic                  data_toggle_clear_qe;
   logic                  usb_data_toggle_clear_en;
@@ -267,7 +269,7 @@ module usbdev
   logic [NEndpoints-1:0] usb_in_rdy;
   logic [NEndpoints-1:0] clear_rdybit, set_sentbit, update_pend;
   logic                  usb_setup_received, setup_received, usb_set_sent, set_sent;
-  logic [NEndpoints-1:0] ep_iso;
+  logic [NEndpoints-1:0] ep_out_iso, ep_in_iso;
   logic [NEndpoints-1:0] enable_setup, enable_out, in_ep_stall, out_ep_stall;
   logic [NEndpoints-1:0] usb_enable_setup, usb_enable_out;
   logic [NEndpoints-1:0] usb_in_ep_stall, usb_out_ep_stall;
@@ -321,7 +323,8 @@ module usbdev
   // CDC: ok, quasi-static
   always_comb begin : proc_map_iso
     for (int i = 0; i < NEndpoints; i++) begin
-      ep_iso[i] = reg2hw.iso[i].q;
+      ep_out_iso[i] = reg2hw.out_iso[i].q;
+      ep_in_iso[i] = reg2hw.in_iso[i].q;
     end
   end
 
@@ -579,18 +582,20 @@ module usbdev
     .clr_devaddr_o        (usb_clr_devaddr),
     .in_ep_enabled_i      (usb_ep_in_enable),
     .out_ep_enabled_i     (usb_ep_out_enable),
-    .ep_iso_i             (ep_iso), // cdc ok, quasi-static
+    .out_ep_iso_i         (ep_out_iso), // cdc ok, quasi-static
+    .in_ep_iso_i          (ep_in_iso), // cdc ok, quasi-static
     .cfg_eop_single_bit_i (reg2hw.phy_config.eop_single_bit.q), // cdc ok: quasi-static
     .tx_osc_test_mode_i   (reg2hw.phy_config.tx_osc_test_mode.q), // cdc ok: quasi-static
     .cfg_rx_differential_i (reg2hw.phy_config.rx_differential_mode.q), // cdc ok: quasi-static
     .data_toggle_clear_i  (usb_data_toggle_clear),
+    .resume_link_active_i (usb_resume_link_active),
 
     // status
     .frame_o              (usb_frame),
     .frame_start_o        (usb_event_frame),
     .link_state_o         (usb_link_state),
     .link_disconnect_o    (usb_event_disconnect),
-    .link_connect_o       (usb_event_connect),
+    .link_powered_o       (usb_event_powered),
     .link_reset_o         (usb_event_link_reset),
     .link_active_o        (usb_link_active),
     .link_suspend_o       (usb_event_link_suspend),
@@ -617,15 +622,10 @@ module usbdev
     .q_o    ({hw2reg.usbstat.link_state.d, hw2reg.usbstat.frame.d})
   );
 
-  // sys clk -> USB clk
-  prim_flop_2sync #(
-    .Width      (1+7)
-  ) cdc_sys_to_usb (
-    .clk_i  (clk_usb_48mhz_i),
-    .rst_ni (rst_usb_48mhz_ni),
-    .d_i    ({reg2hw.usbctrl.enable.q, reg2hw.usbctrl.device_address.q}),
-    .q_o    ({usb_enable,              usb_device_addr})
-  );
+  assign usb_enable = reg2hw.usbctrl.enable.q;
+  assign usb_device_addr = reg2hw.usbctrl.device_address.q;
+  assign usb_resume_link_active = reg2hw.usbctrl.resume_link_active.qe &
+                                  reg2hw.usbctrl.resume_link_active.q;
 
   // CDC for event signals (arguably they are there for a long time so would be ok)
   // Just want a pulse to ensure only one interrupt for an event
@@ -633,9 +633,9 @@ module usbdev
     .clk_i  (clk_i),
     .rst_ni (rst_ni),
     .d_i    ({usb_event_disconnect, usb_event_link_reset, usb_event_link_suspend,
-              usb_event_host_lost, usb_event_connect}),
+              usb_event_host_lost, usb_event_powered}),
     .q_o    ({event_disconnect, event_link_reset, event_link_suspend,
-              event_host_lost, event_connect})
+              event_host_lost, event_powered})
   );
 
   // Resume is a single pulse so needs pulsesync
@@ -651,14 +651,7 @@ module usbdev
   assign hw2reg.usbstat.host_lost.d = event_host_lost;
 
   // resets etc cause the device address to clear
-  prim_pulse_sync usbdev_devclr (
-    .clk_src_i   (clk_usb_48mhz_i),
-    .clk_dst_i   (clk_i),
-    .rst_src_ni  (rst_usb_48mhz_ni),
-    .rst_dst_ni  (rst_ni),
-    .src_pulse_i (usb_clr_devaddr),
-    .dst_pulse_o (hw2reg.usbctrl.device_address.de)
-  );
+  assign hw2reg.usbctrl.device_address.de = usb_clr_devaddr;
   assign hw2reg.usbctrl.device_address.d = '0;
 
   // AV empty is a single pulse so needs pulsesync
@@ -766,6 +759,8 @@ module usbdev
     .rst_ni,
     .clk_aon_i,
     .rst_aon_ni,
+    .clk_usb_48mhz_i,
+    .rst_usb_48mhz_ni,
 
     .tl_i (tl_i),
     .tl_o (tl_o),
@@ -843,17 +838,17 @@ module usbdev
     .intr_o                 (intr_disconnected_o)
   );
 
-  prim_intr_hw #(.Width(1)) intr_connected (
+  prim_intr_hw #(.Width(1)) intr_powered (
     .clk_i,
     .rst_ni,
-    .event_intr_i           (event_connect),
-    .reg2hw_intr_enable_q_i (reg2hw.intr_enable.connected.q),
-    .reg2hw_intr_test_q_i   (reg2hw.intr_test.connected.q),
-    .reg2hw_intr_test_qe_i  (reg2hw.intr_test.connected.qe),
-    .reg2hw_intr_state_q_i  (reg2hw.intr_state.connected.q),
-    .hw2reg_intr_state_de_o (hw2reg.intr_state.connected.de),
-    .hw2reg_intr_state_d_o  (hw2reg.intr_state.connected.d),
-    .intr_o                 (intr_connected_o)
+    .event_intr_i           (event_powered),
+    .reg2hw_intr_enable_q_i (reg2hw.intr_enable.powered.q),
+    .reg2hw_intr_test_q_i   (reg2hw.intr_test.powered.q),
+    .reg2hw_intr_test_qe_i  (reg2hw.intr_test.powered.qe),
+    .reg2hw_intr_state_q_i  (reg2hw.intr_state.powered.q),
+    .hw2reg_intr_state_de_o (hw2reg.intr_state.powered.de),
+    .hw2reg_intr_state_d_o  (hw2reg.intr_state.powered.d),
+    .intr_o                 (intr_powered_o)
   );
 
   prim_intr_hw #(.Width(1)) intr_host_lost (
@@ -1142,7 +1137,8 @@ module usbdev
   end
 
   assign usb_aon_wake_en_o = reg2hw.wake_config.wake_en.q;
-  assign usb_aon_wake_ack_o = reg2hw.wake_config.wake_ack.q;
+  assign usb_aon_wake_ack_o = reg2hw.wake_config.wake_ack.qe &
+                              reg2hw.wake_config.wake_ack.q;
   // re-use I/O version to allow software override if needed
   assign usb_suspend_o = cio_suspend_o;
 
@@ -1192,7 +1188,7 @@ module usbdev
   //Interrupt signals
   `ASSERT_KNOWN(USBIntrPktRcvdKnown_A, intr_pkt_received_o)
   `ASSERT_KNOWN(USBIntrPktSentKnown_A, intr_pkt_sent_o)
-  `ASSERT_KNOWN(USBIntrConnKnown_A, intr_connected_o)
+  `ASSERT_KNOWN(USBIntrPwrdKnown_A, intr_powered_o)
   `ASSERT_KNOWN(USBIntrDisConKnown_A, intr_disconnected_o)
   `ASSERT_KNOWN(USBIntrHostLostKnown_A, intr_host_lost_o)
   `ASSERT_KNOWN(USBIntrLinkRstKnown_A, intr_link_reset_o)

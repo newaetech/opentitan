@@ -12,10 +12,10 @@ use std::iter::{IntoIterator, Iterator};
 use std::path::PathBuf;
 use structopt::StructOpt;
 
-mod backend;
 mod command;
 use opentitanlib::app::command::CommandDispatch;
 use opentitanlib::app::TransportWrapper;
+use opentitanlib::backend;
 
 #[derive(Debug, StructOpt, CommandDispatch)]
 enum RootCommandHierarchy {
@@ -141,7 +141,7 @@ where
 fn main() -> Result<()> {
     let opts = parse_command_line(Opts::from_args(), args_os())?;
 
-    let transport = backend::create(&opts.backend_opts)?;
+    let transport = backend::create(&opts.backend_opts, "proxy")?;
 
     for command in &opts.exec {
         execute(

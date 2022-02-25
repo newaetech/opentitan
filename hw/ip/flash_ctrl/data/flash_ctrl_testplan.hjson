@@ -86,7 +86,7 @@
             Read affected bank in order to verify erase suspension feature.
             '''
       milestone: V2
-      tests: []
+      tests: ["flash_ctrl_erase_suspend"]
     }
     {
       name: full_memory_access
@@ -120,7 +120,7 @@
             bank. Expect that operations are successfully executed.
             '''
       milestone: V2
-      tests: []
+      tests: ["flash_ctrl_phy_arb"]
     }
     {
       name: host_interleave
@@ -146,6 +146,14 @@
       tests: []
     }
     {
+      name: fetch_code
+      desc: '''
+            Test code fetch feature. 
+            '''
+      milestone: V2
+      tests: []
+    }
+    {
       name: all_partitions
       desc: '''
             Sanity + both, legal data and info partitions are accessed. In future, support for
@@ -153,15 +161,6 @@
             '''
       milestone: V2
       tests: ["flash_ctrl_rand_ops"]
-    }
-    {
-      name: error_oob
-      desc: '''
-            Perform accesses in order to provoke error out of bound value. Test both, Software
-            interface and Hardware interface. Related covergroup is error_cg.
-            '''
-      milestone: V2
-      tests: []
     }
     {
       name: error_mp
@@ -178,7 +177,7 @@
             Perform accesses in order to provoke read data error. Test both, Software interface and
             Hardware interface. Related covergroup is error_cg.
             '''
-      milestone: V2
+      milestone: V2S
       tests: []
     }
     {
@@ -205,7 +204,7 @@
             Perform accesses in order to provoke native flash error. Test both, Software interface
             and Hardware interface. Related covergroup is error_cg.
             '''
-      milestone: V2
+      milestone: V2S
       tests: []
     }
     {
@@ -214,23 +213,25 @@
             Perform accesses in order to provoke life cycle management interface error. Related
             covergroup is error_cg.
             '''
-      milestone: V2
+      milestone: V2S
       tests: []
     }
     {
       name: secret_partition
       desc: '''
-            Verify values of secret information partitions. Enabling by life cycle and otp is
-            required. Pages are read upon flash controller initialization.
+            Verify the secret information partitions. Accessibility is controlled by the Life Cycle Controller
+            Seeds are read upon flash controller initialization and sent to the Key Manager, additionally verify
+            that scramble Keys are Read from the OTP and sent into the Flash Ctlr.  Also erify that programmed
+            Secret Partitions retain their values through a Reset Cycle.
             '''
       milestone: V2
-      tests: []
+      tests: ["flash_ctrl_hw_sec_otp"]
     }
     {
       name: isolation_partition
       desc: '''
-            Verify values of isolated information partitions. Accessablity is controlled by life
-            cycle and otp.
+            Verify the isolated information partitions. Accessiblity is controlled by the Life Cycle Controller
+            
             '''
       milestone: V2
       tests: []
@@ -255,7 +256,7 @@
             pre-scramble ECC(integrity ESS, 4-bits) and post-scramble ECC(reliability ECC, 8-bits).
 	    Test status and control ECC bits.
             '''
-      milestone: V2
+      milestone: V2S
       tests: []
     }
     {
@@ -268,7 +269,7 @@
             the timing is correct (subsequent reads should be faster). When scrambling is not
             enabled, ensure that the raw data is written and read back.
             '''
-      milestone: V3
+      milestone: V2S
       tests: []
     }
     {
@@ -334,14 +335,12 @@
       name: error_cg
       desc: '''
             Covers following error scenarios given in Flash error code register:
-            - oob_err: The supplied address ADDR is invalid and out of bounds.
             - mp_err: Flash access has encountered an access permission error.
             - rd_err: Flash read has an uncorrectable data error.
             - prog_win_err: Flash program has a window resolution error.
             - prog_type_err: Flash program selected unavailable type.
             - flash_phy_err: The flash access encountered a native flash error.
             Covers following error scenarios given in Flash fault status register:
-            - oob_err: The flash hardware interface supplied an out of bound value.
             - mp_err: The flash hardware interface encountered a memory permission error.
             - rd_err: The flash hardware interface encountered a read data error.
             - prog_win_err: The flash hardware interface encountered a program resolution error.

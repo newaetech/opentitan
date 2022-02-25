@@ -393,3 +393,180 @@ together the static side `tb` which instantiates the `dut`, and the dynamic
 side, which is the UVM environment extended from CIP library. The diagram
 lists some common items that need to be instantiated in `tb`
 and set into `uvm_config_db` for the testbench to work.
+
+## Security Verification in cip_lib
+CIP contains reusable security verification components, sequences and function coverage.
+This section describes the details of them and the steps to enable them.
+
+### Security Verification for bus integrity
+The countermeasure of bus integrity can be fully verified via importing [tl_access_tests](https://github.com/lowRISC/opentitan/blob/master/hw/dv/tools/dvsim/tests//tl_access_tests.hjson) and [tl_device_access_types_testplan](https://github.com/lowRISC/opentitan/blob/master/hw/dv/tools/dvsim/testplans/tl_device_access_types_testplan.hjson).
+The `tl_intg_err` test injects errors on control, data, or the ECC bits and verifies that the integrity error will trigger a fatal alert (provided via `cfg.tl_intg_alert_name`) and error status (provided via `cfg.tl_intg_alert_fields`) is set.
+Refer to section [cip_base_env_cfg](#cip_base_env_cfg) for more information on these 2 variables.
+The user may update these 2 variables as follows.
+```systemverilog
+class ip_env_cfg extends cip_base_env_cfg #(.RAL_T(ip_reg_block));
+  virtual function void initialize(bit [31:0] csr_base_addr = '1);
+    super.initialize(csr_base_addr);
+    tl_intg_alert_name = "fatal_fault_err";
+    // csr / field name may vary in different IPs
+    tl_intg_alert_fields[ral.fault_status.intg_err] = 1;
+```
+
+### Security Verification for shadow CSRs
+The countermeasure of shadow CSRs can be fully verified via importing [shadow_reg_errors_tests](https://github.com/lowRISC/opentitan/blob/master/hw/dv/tools/dvsim/tests/shadow_reg_errors_tests.hjson) and [shadow_reg_errors_testplan](https://github.com/lowRISC/opentitan/blob/master/hw/dv/tools/dvsim/testplans/shadow_reg_errors_testplan.hjson).
+The details of the test sequences are described in the testplan, users need to assign the status CSR fields to `cfg.shadow_update_err_status_fields` and `cfg.shadow_storage_err_status_fields` for update error and storage error respectively.
+```systemverilog
+class ip_env_cfg extends cip_base_env_cfg #(.RAL_T(ip_reg_block));
+  virtual function void initialize(bit [31:0] csr_base_addr = '1);
+    super.initialize(csr_base_addr);
+    // csr / field name may vary in different IPs
+    shadow_update_err_status_fields[ral.err_code.invalid_shadow_update] = 1;
+    shadow_storage_err_status_fields[ral.fault_status.shadow] = 1;
+```
+
+### Security Verification for REGWEN CSRs
+If the REGWEN CSR meets the following criteria, it can be fully verified by the common [csr_tests](https://github.com/lowRISC/opentitan/blob/master/hw/dv/tools/dvsim/tests/csr_tests.hjson).
+ - The REGWEN CSR and its related lockable CSRs are HW read-only registers.
+ - The related lockable CSRs are not WO type, otherwise the read value is always 0 and CSR tests can't really verify if the write value is taken or not.
+ - No CSR exclusions have been added to the REGWEN CSR and its related lockable CSRs.
+If not, users need to write a test to verify it separately since cip_lib and dv_base_reg can't predict its value.
+For example, the [sram_ctrl_regwen_vseq](https://github.com/lowRISC/opentitan/blob/master/hw/ip/sram_ctrl/dv/env/seq_lib/sram_ctrl_regwen_vseq.sv) has been added to verify `ctrl_regwen` and the the lockable register `ctrl` since `ctrl` is a `WO` register and excluded in CSR tests.
+
+Functional coverage for REGWEN CSRs and their related lockable CSRs is generated automatically in dv_base_reg.
+The details of functional coverage is described in [csr_testplan](https://github.com/lowRISC/opentitan/blob/master/hw/dv/tools/dvsim/testplans/csr_testplan.hjson).
+
+### Security Verification for MUBI type CSRs
+A functional covergroup of MUBI type CSR is automatically created in the RAL model for each MUBI CSR, which ensures `True`, `False` and at least N of other values (N = width of the MUBI type) have been collected.
+This covergroup won't be sampled in CSR tests, since CSR tests only test the correctness of the value of register read / write but it won't check the block behavior when a different value is supplied to the MUBI CSR.
+Users should randomize the values of all the MUBI CSRs in non-CSR tests and check the design behaves correctly.
+The helper functions `cip_base_pkg::get_rand_mubi4|8|12|16_val(t_weight, f_weight, other_weight)` can be used to get the random values.
+
+### Security Verification for MUBI type ports
+In OpenTitan [Design Verification Methodology]({{< relref "doc/ug/dv_methodology" >}}), it's mandatory to have 100% toggle coverage on all the ports.
+However, the MUBI defined values (`True` and `False`) are complement numbers.
+If users only test with `True` and `False` without using other values, toggle coverage can be 100%.
+Hence, user should add a functional covergroup for each MUBI type input port, via binding the interface `cip_mubi_cov_if` which contains a covergroup for MUBI.
+The type `lc_ctrl_pkg::lc_tx_t` should be treated as a Mubi4 type, which also needs to be bound with the interface `cip_mubi_cov_if`.
+The helper functions `cip_base_pkg::get_rand_mubi4|8|12|16_val(t_weight, f_weight, other_weight)` and `cip_base_pkg::get_rand_lc_tx_val` can be used to get the random values.
+
+The following is an example from `sram_ctrl`, in which it binds the coverage interface to 2 MUBI input ports.
+```systemverilog
+module sram_ctrl_cov_bind;
+
+  bind sram_ctrl cip_mubi_cov_if #(.Width(4)) u_hw_debug_en_mubi_cov_if (
+    .rst_ni (rst_ni),
+    .mubi   (lc_hw_debug_en_i)
+  );
+
+  bind sram_ctrl cip_mubi_cov_if #(.Width(8)) u_otp_en_sram_ifetch_mubi_cov_if (
+    .rst_ni (rst_ni),
+    .mubi   (otp_en_sram_ifetch_i)
+  );
+endmodule
+```
+Note: The `sim_tops` in sim_cfg.hjson should be updated to include this bind file.
+
+### Security Verification for common countermeasure primitives
+A [security countermeasure verification framework]({{< relref "doc/ug/sec_cm_dv_framework" >}}) is implemented in cip_lib to verify common countermeasure primitives in a semi-uutomated way.
+
+cip_lib imports [sec_cm_pkg](https://github.com/lowRISC/opentitan/tree/master/hw/dv/sv/sec_cm), which automatically locates all the common countermeasure primitives and binds an interface to each of them.
+In the cib_base_vseq, it injects a fault to each of these primitives and verifies that the fault will lead to a fatal alert.
+The details of the sequences can be found in testplans - [sec_cm_count_testplan](https://github.com/lowRISC/opentitan/blob/master/hw/dv/tools/dvsim/testplans/sec_cm_count_testplan.hjson), [sec_cm_fsm_testplan](https://github.com/lowRISC/opentitan/blob/master/hw/dv/tools/dvsim/testplans/sec_cm_fsm_testplan.hjson) and [sec_cm_double_lfsr_testplan](https://github.com/lowRISC/opentitan/blob/master/hw/dv/tools/dvsim/testplans/sec_cm_double_lfsr_testplan.hjson).
+If the block uses common security countermeasure primitives (prim_count, prim_sparse_fsm_flop, prim_double_lfsr), users can enable this sequence to fully verify them via following steps.
+
+1. Import the applicable sec_cm testplans.
+If more checks or sequences are needed, add another testpoint in the block testplan.
+For example, when the fault is detected by countermeasure, some subsequent operations won’t be executed.
+Add a testpoint in the testplan to capture this sequence and the checks.
+
+2. Import [sec_cm_tests](https://github.com/lowRISC/opentitan/blob/master/hw/dv/tools/dvsim/tests/sec_cm_tests.hjson) in sim_cfg.hjson file, as well as add applicable sec_cm bind files for `sim_tops`.
+The `ip_sec_cm` test will be added and all common countermeasure primitives will be verified in this test.
+
+```
+sim_tops: ["ip_ctrl_bind", "ip_ctrl_cov_bind",
+           // only add the corresponding bind file if DUT has the primitive
+           "sec_cm_prim_sparse_fsm_flop_bind",
+           "sec_cm_prim_count_bind",
+           "sec_cm_prim_double_lfsr_bind"]
+```
+
+3. Import sec_cm_pkg in the env_pkg
+```systemverilog
+package ip_env_pkg;
+  import uvm_pkg::*;
+  import sec_cm_pkg::*;
+  …
+```
+
+4. Set alert name for countermeasure if the alert name is different from the default name - “fatal_fault”.
+```systemverilog
+class ip_env_cfg extends cip_base_env_cfg #(.RAL_T(ip_reg_block));
+  virtual function void initialize(bit [31:0] csr_base_addr = '1);
+    super.initialize(csr_base_addr);
+    sec_cm_alert_name = "fatal_check_error";
+```
+
+5. Override the `check_sec_cm_fi_resp` task in ip_common_vseq to add additional sequences and checks after fault injection.
+This is an example from keymgr, in which CSR `fault_status` will be updated according to the location of the fault and the operation after fault inject will lead design to enter `StInvalid` state.
+```systemverilog
+class keymgr_common_vseq extends keymgr_base_vseq;
+  virtual task check_sec_cm_fi_resp(sec_cm_base_if_proxy if_proxy);
+    bit[TL_DW-1:0] exp;
+
+    super.check_sec_cm_fi_resp(if_proxy);
+
+    case (if_proxy.sec_cm_type)
+      SecCmPrimCount: begin
+        // more than one prim_count are used, distinguishing them through the path of the primitive.
+        if (!uvm_re_match("*.u_reseed_ctrl*", if_proxy.path)) begin
+          exp[keymgr_pkg::FaultReseedCnt] = 1;
+        end else begin
+          exp[keymgr_pkg::FaultCtrlCnt] = 1;
+        end
+      end
+      SecCmPrimSparseFsmFlop: begin
+        exp[keymgr_pkg::FaultCtrlFsm] = 1;
+      end
+      default: `uvm_fatal(`gfn, $sformatf("unexpected sec_cm_type %s", if_proxy.sec_cm_type.name))
+    endcase
+    csr_rd_check(.ptr(ral.fault_status), .compare_value(exp));
+
+    // after an advance, keymgr should enter StInvalid
+    keymgr_advance();
+    csr_rd_check(.ptr(ral.op_status), .compare_value(keymgr_pkg::OpDoneFail));
+    csr_rd_check(.ptr(ral.working_state), .compare_value(keymgr_pkg::StInvalid));
+  endtask : check_sec_cm_fi_resp
+```
+
+6. Fault injection may trigger unexpected SVA errors. Override the `sec_cm_fi_ctrl_svas` function to disable them. `sec_cm_fi_ctrl_svas(.enable(1))` will be invoked before injecting fault. After reset, `sec_cm_fi_ctrl_svas(.enable(0))` will be called to re-enable the SVA checks.
+```systemverilog
+class keymgr_common_vseq extends keymgr_base_vseq;
+   virtual function void sec_cm_fi_ctrl_svas(sec_cm_base_if_proxy if_proxy, bit enable);
+    case (if_proxy.sec_cm_type)
+      SecCmPrimCount: begin
+        if (enable) begin
+          $asserton(0, "tb.keymgr_kmac_intf");
+          $asserton(0, "tb.dut.tlul_assert_device.gen_device.dDataKnown_A");
+          $asserton(0, "tb.dut.u_ctrl.DataEn_A");
+          $asserton(0, "tb.dut.u_ctrl.DataEnDis_A");
+          $asserton(0, "tb.dut.u_ctrl.CntZero_A");
+          $asserton(0, "tb.dut.u_kmac_if.LastStrb_A");
+          $asserton(0, "tb.dut.KmacDataKnownO_A");
+        end else begin
+          $assertoff(0, "tb.keymgr_kmac_intf");
+          $assertoff(0, "tb.dut.tlul_assert_device.gen_device.dDataKnown_A");
+          $assertoff(0, "tb.dut.u_ctrl.DataEn_A");
+          $assertoff(0, "tb.dut.u_ctrl.DataEnDis_A");
+          $assertoff(0, "tb.dut.u_ctrl.CntZero_A");
+          $assertoff(0, "tb.dut.u_kmac_if.LastStrb_A");
+          $assertoff(0, "tb.dut.KmacDataKnownO_A");
+        end
+      end
+      SecCmPrimSparseFsmFlop: begin
+        // No need to disable any assertion
+      end
+
+      default: `uvm_fatal(`gfn, $sformatf("unexpected sec_cm_type %s", if_proxy.sec_cm_type.name))
+    endcase
+  endfunction: sec_cm_fi_ctrl_svas
+```
