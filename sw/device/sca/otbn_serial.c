@@ -118,6 +118,7 @@ static void simpleserial_cmd(const uint8_t *data, size_t data_len)
 {
   otbn_t otbn_ctx;  
   dif_otbn_err_bits_t err_bits;
+  uint32_t insn_cnt;
   CHECK(otbn_init(&otbn_ctx, mmio_region_from_addr(
                                  TOP_EARLGREY_OTBN_BASE_ADDR)) == kOtbnOk);
   CHECK(otbn_zero_data_memory(&otbn_ctx) == kOtbnOk);
@@ -140,6 +141,9 @@ static void simpleserial_cmd(const uint8_t *data, size_t data_len)
   LOG_INFO("Wait for done");
   CHECK(otbn_busy_wait_for_done(&otbn_ctx) == kOtbnOk);
   sca_set_trigger_low();
+
+  dif_otbn_get_insn_cnt(&otbn_ctx.dif, &insn_cnt);
+  LOG_INFO("Debug: OTBN.INSN_CNT = 0x%x", insn_cnt);
 
   dif_otbn_get_err_bits(&otbn_ctx.dif, &err_bits);
   if (err_bits){
