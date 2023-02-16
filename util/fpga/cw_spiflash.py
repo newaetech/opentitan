@@ -146,14 +146,23 @@ class _Bootstrap:
                                         'USB_A18',
                                         'USB_A19',
                                         'USB_A20')
+   # _PIN_MAPPINGS['CW310'] = PinMapping('USB_SPI_SCK',
+   #                                     'USB_SPI_COPI',
+   #                                     'USB_SPI_CIPO',
+   #                                     'USB_SPI_CS',
+   #                                     'USB_A17',
+   #                                     'USB_A18',
+   #                                     'USB_A19',
+   #                                     'USB_A16')
+   
     _PIN_MAPPINGS['CW310'] = PinMapping('USB_SPI_SCK',
                                         'USB_SPI_COPI',
                                         'USB_SPI_CIPO',
                                         'USB_SPI_CS',
-                                        'USB_A17',
-                                        'USB_A18',
-                                        'USB_A19',
-                                        'USB_A16')
+                                        'PC21',
+                                        'PC22',
+                                        'PC23',
+                                        'PC24')
     _board = 'CW305'
 
     # Delays below are in seconds.
