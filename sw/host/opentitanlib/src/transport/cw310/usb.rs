@@ -100,7 +100,7 @@ impl Backend {
     const LAST_PIN_NUMBER: u8 = 106;
 
     const VID_NEWAE: u16 = 0x2b3e;
-    const PID_CW310: u16 = 0xc310;
+    const PID_CW310: u16 = 0xc340;
 
     /// Create a new connection to a CW310 board.
     pub fn new(

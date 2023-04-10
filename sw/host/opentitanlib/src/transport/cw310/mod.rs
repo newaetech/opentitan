@@ -49,12 +49,12 @@ impl CW310 {
     const PIN_CS: &'static str = "USB_SPI_CS";
     // Pins needed for reset & bootstrap on the CW310 board.
     const PIN_TRST: &'static str = "USB_A13";
-    const PIN_SRST: &'static str = "USB_A14";
-    const PIN_SW_STRAP0: &'static str = "USB_A15";
-    const PIN_SW_STRAP1: &'static str = "USB_A16";
-    const PIN_SW_STRAP2: &'static str = "USB_A17";
-    const PIN_TAP_STRAP0: &'static str = "USB_A18";
-    const PIN_TAP_STRAP1: &'static str = "USB_A19";
+    const PIN_SRST: &'static str = "PC2";
+    const PIN_SW_STRAP0: &'static str = "PC21";
+    const PIN_SW_STRAP1: &'static str = "PC22";
+    const PIN_SW_STRAP2: &'static str = "PC23";
+    const PIN_TAP_STRAP0: &'static str = "PB12";
+    const PIN_TAP_STRAP1: &'static str = "PB13";
 
     pub fn new(
         usb_vid: Option<u16>,

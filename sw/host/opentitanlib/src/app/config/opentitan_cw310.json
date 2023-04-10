@@ -5,32 +5,32 @@
     {
       "name": "RESET",
       "mode": "PushPull",
-      "alias_of": "USB_A14",
+      "alias_of": "PC2",
       "pull_mode": "None"
     },
     {
       "name": "IOC0",
-      "alias_of": "USB_A15"
+      "alias_of": "PC21"
     },
     {
       "name": "IOC1",
-      "alias_of": "USB_A16"
+      "alias_of": "PC22"
     },
     {
       "name": "IOC2",
-      "alias_of": "USB_A17"
+      "alias_of": "PC23"
     },
     {
       "name": "TAP_STRAP0",
       "mode": "PushPull",
       "pull_mode": "None"
-      "alias_of": "USB_A18"
+      "alias_of": "PB13"
     },
     {
       "name": "TAP_STRAP1",
       "mode": "PushPull",
       "pull_mode": "None"
-      "alias_of": "USB_A19"
+      "alias_of": "PB12"
     }
   ],
   "spi": [
