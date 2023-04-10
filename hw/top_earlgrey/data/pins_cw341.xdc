@@ -6,7 +6,9 @@
 ##
 
 ## Clock Signal
-set_property -dict { PACKAGE_PIN AN29 IOSTANDARD LVCMOS18 } [get_ports { IO_CLK }]; # PLL_CLK2
+# PLL_CLK2 should be AN29, but here D23 is used /USB_CE so requires a jumper. Using AN29 caused placement error which could be worked
+# around, but for now use this pin, consider changing pinout on hardware.
+set_property -dict { PACKAGE_PIN D23 IOSTANDARD LVCMOS18 } [get_ports { IO_CLK }];
 
 ## Clock constraints
 ## set via clocks.xdc
@@ -157,4 +159,4 @@ set_output_delay -max -clock ${usb_embed_out_clk} 14 [get_ports {IO_USB_DP_TX IO
 
 ## Configuration options, can be used for all designs
 set_property CONFIG_VOLTAGE 1.8 [current_design]
-set_property CFGBVS VCCO [current_design]
+set_property CFGBVS GND [current_design]

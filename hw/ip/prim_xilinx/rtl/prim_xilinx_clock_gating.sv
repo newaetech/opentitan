@@ -21,7 +21,7 @@ module prim_xilinx_clock_gating #(
       // circumstances cannot be cascaded. They should especially be used for (gating)
       // clocks that span big parts of the design/multiple clock regions.
       BUFGCE #(
-        .SIM_DEVICE("7SERIES")
+        .SIM_DEVICE("ULTRASCALE")
       ) u_bufgce (
         .I (clk_i),
         .CE(en_i | test_en_i),
