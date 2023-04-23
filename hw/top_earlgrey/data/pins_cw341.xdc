@@ -18,7 +18,7 @@ set_property -dict { PACKAGE_PIN AN13 IOSTANDARD LVCMOS18 PULLTYPE PULLUP} [get_
                                                                                                          # NC as there is no use of this on CW340 now.
 
 ## JTAG system reset
-set_property -dict { PACKAGE_PIN  E23  IOSTANDARD LVCMOS18 } [get_ports { JTAG_SRST_N }]; #USR_DBG_nRST (nSRST) #removed PULLTYPE PULLUP for FTDI usage
+set_property -dict { PACKAGE_PIN  E23  IOSTANDARD LVCMOS18 PULLTYPE PULLUP } [get_ports { JTAG_SRST_N }]; #USR_DBG_nRST (nSRST)
 
 ## Power-on Reset
 set_property -dict { PACKAGE_PIN  AC31 IOSTANDARD LVCMOS18 PULLTYPE PULLUP } [get_ports { POR_N }]; # Main PORN, requires jumper to SW1 [was USB_A14 (SAM3X)]
@@ -69,20 +69,20 @@ set_property -dict { PACKAGE_PIN AN12 IOSTANDARD LVCMOS18 } [get_ports { IOB12 }
 
 ## IOC bank
 # SW Straps
-set_property -dict { PACKAGE_PIN AG34  IOSTANDARD LVCMOS18 } [get_ports { IOC0 }]; #USB_A15 (SAM3X) #removed PULLTYPE PULLDOWN for FTDI usage
-set_property -dict { PACKAGE_PIN AF34  IOSTANDARD LVCMOS18 } [get_ports { IOC1 }]; #USB_A16 (SAM3X) #removed PULLTYPE PULLDOWN for FTDI usage
-set_property -dict { PACKAGE_PIN AF33  IOSTANDARD LVCMOS18 } [get_ports { IOC2 }]; #USB_A17 (SAM3X) #removed PULLTYPE PULLDOWN for FTDI usage
+set_property -dict { PACKAGE_PIN AG34  IOSTANDARD LVCMOS18 PULLTYPE PULLDOWN } [get_ports { IOC0 }]; #USB_A15 (SAM3X)
+set_property -dict { PACKAGE_PIN AF34  IOSTANDARD LVCMOS18 PULLTYPE PULLDOWN } [get_ports { IOC1 }]; #USB_A16 (SAM3X)
+set_property -dict { PACKAGE_PIN AF33  IOSTANDARD LVCMOS18 PULLTYPE PULLDOWN } [get_ports { IOC2 }]; #USB_A17 (SAM3X)
 # Main UART
 set_property -dict { PACKAGE_PIN AE33  IOSTANDARD LVCMOS18 } [get_ports { IOC3 }]; #UART1TXD - OpenTitan UART0 RX
 set_property -dict { PACKAGE_PIN AD34 IOSTANDARD LVCMOS18 } [get_ports { IOC4 }]; #UART1RXD - OpenTitan UART0 TX
 # TAP Strap 1
-set_property -dict { PACKAGE_PIN AC34  IOSTANDARD LVCMOS18 } [get_ports { IOC5 }]; #USB_A19 (SAM3X) #removed PULLTYPE PULLDOWN for FTDI usage
+set_property -dict { PACKAGE_PIN AC34  IOSTANDARD LVCMOS18 PULLTYPE PULLDOWN } [get_ports { IOC5 }]; #USB_A19 (SAM3X)
 # PWM (PMOD2)
 set_property -dict { PACKAGE_PIN AB34  IOSTANDARD LVCMOS18 } [get_ports { IOC6 }]; # PMOD2_IO2 (PWM)
 # USB VBUS Detection
 set_property -dict { PACKAGE_PIN AA34  IOSTANDARD LVCMOS18 } [get_ports { IOC7 }]; # USRUSB_VBUS_DETECT
 # TAP Strap 0
-set_property -dict { PACKAGE_PIN AB32  IOSTANDARD LVCMOS18 } [get_ports { IOC8 }]; #USB_A18 (SAM3X) #removed PULLTYPE PULLDOWN for FTDI usage
+set_property -dict { PACKAGE_PIN AB32  IOSTANDARD LVCMOS18 PULLTYPE PULLDOWN } [get_ports { IOC8 }]; #USB_A18 (SAM3X)
 # GPIOs (PMOD2)
 set_property -dict { PACKAGE_PIN AB31 IOSTANDARD LVCMOS18 } [get_ports { IOC9  }]; # PMOD2_IO1 (GPIO)
 set_property -dict { PACKAGE_PIN AA32 IOSTANDARD LVCMOS18 } [get_ports { IOC10 }]; # PMOD2_IO3 (GPIO)
@@ -92,12 +92,11 @@ set_property -dict { PACKAGE_PIN U34 IOSTANDARD LVCMOS18 } [get_ports { IOC12 }]
 
 ## IOR bank
 # JTAG
-# ultrascale PU current is 60 to 678uA, = 30K to 2.6K
-set_property -dict { PACKAGE_PIN AL33 IOSTANDARD LVCMOS18 } [get_ports { IOR0  }]; #USR_DBG_TMS #removed PULLTYPE PULLUP for FTDI usage
-set_property -dict { PACKAGE_PIN AK27 IOSTANDARD LVCMOS18 } [get_ports { IOR1  }]; #USR_DBG_TDO #removed PULLTYPE PULLUP for FTDI usage
-set_property -dict { PACKAGE_PIN AK31 IOSTANDARD LVCMOS18 } [get_ports { IOR2  }]; #USR_DBG_TDI #removed PULLTYPE PULLUP for FTDI usage
-set_property -dict { PACKAGE_PIN AL34 IOSTANDARD LVCMOS18 } [get_ports { IOR3  }]; #USR_DBG_TCK #removed PULLTYPE PULLUP for FTDI usage
-set_property -dict { PACKAGE_PIN AJ34 IOSTANDARD LVCMOS18 } [get_ports { IOR4  }]; #USR_DBG_TDAT1 (nTRST) #removed PULLTYPE PULLUP for FTDI usage
+set_property -dict { PACKAGE_PIN AL33 IOSTANDARD LVCMOS18 PULLTYPE PULLUP } [get_ports { IOR0  }]; #USR_DBG_TMS
+set_property -dict { PACKAGE_PIN AK27 IOSTANDARD LVCMOS18 PULLTYPE PULLUP } [get_ports { IOR1  }]; #USR_DBG_TDO
+set_property -dict { PACKAGE_PIN AK31 IOSTANDARD LVCMOS18 PULLTYPE PULLUP } [get_ports { IOR2  }]; #USR_DBG_TDI
+set_property -dict { PACKAGE_PIN AL34 IOSTANDARD LVCMOS18 PULLTYPE PULLUP } [get_ports { IOR3  }]; #USR_DBG_TCK
+set_property -dict { PACKAGE_PIN AJ34 IOSTANDARD LVCMOS18 PULLTYPE PULLUP } [get_ports { IOR4  }]; #USR_DBG_TDAT1 (nTRST)
 # GPIO (LED)
 set_property -dict { PACKAGE_PIN AK30 IOSTANDARD LVCMOS18 } [get_ports { IOR5  }]; # USRDIP7
 set_property -dict { PACKAGE_PIN AH32 DRIVE 8 IOSTANDARD LVCMOS18 } [get_ports { IOR6  }]; # USRLED0
