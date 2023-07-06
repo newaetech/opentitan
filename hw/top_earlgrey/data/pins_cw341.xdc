@@ -6,9 +6,8 @@
 ##
 
 ## Clock Signal
-# PLL_CLK2 should be AN29, but here D23 is used /USB_CE so requires a jumper. Using AN29 caused placement error which could be worked
-# around, but for now use this pin, consider changing pinout on hardware.
-set_property -dict { PACKAGE_PIN D23 IOSTANDARD LVCMOS18 } [get_ports { IO_CLK }];
+# PLL2 alt signal
+set_property -dict { PACKAGE_PIN E22 IOSTANDARD LVCMOS18 } [get_ports { IO_CLK }];
 
 ## Clock constraints
 ## set via clocks.xdc
@@ -21,7 +20,7 @@ set_property -dict { PACKAGE_PIN AN13 IOSTANDARD LVCMOS18 PULLTYPE PULLUP} [get_
 set_property -dict { PACKAGE_PIN  E23  IOSTANDARD LVCMOS18 PULLTYPE PULLUP } [get_ports { JTAG_SRST_N }]; #USR_DBG_nRST (nSRST)
 
 ## Power-on Reset
-set_property -dict { PACKAGE_PIN  AC31 IOSTANDARD LVCMOS18 PULLTYPE PULLUP } [get_ports { POR_N }]; # Main PORN, requires jumper to SW1 [was USB_A14 (SAM3X)]
+set_property -dict { PACKAGE_PIN  G26 IOSTANDARD LVCMOS18 PULLTYPE PULLUP } [get_ports { POR_N }]; # Main PORN, requires jumper to SW1 [was USB_A14 (SAM3X)]
 
 ## Preserve prim_prince modules and setup multi-cycle paths
 ## These are no longer required, but kept here as a reference
@@ -69,26 +68,26 @@ set_property -dict { PACKAGE_PIN AN12 IOSTANDARD LVCMOS18 } [get_ports { IOB12 }
 
 ## IOC bank
 # SW Straps
-set_property -dict { PACKAGE_PIN AG34  IOSTANDARD LVCMOS18 PULLTYPE PULLDOWN } [get_ports { IOC0 }]; #USB_A15 (SAM3X)
-set_property -dict { PACKAGE_PIN AF34  IOSTANDARD LVCMOS18 PULLTYPE PULLDOWN } [get_ports { IOC1 }]; #USB_A16 (SAM3X)
-set_property -dict { PACKAGE_PIN AF33  IOSTANDARD LVCMOS18 PULLTYPE PULLDOWN } [get_ports { IOC2 }]; #USB_A17 (SAM3X)
+set_property -dict { PACKAGE_PIN T24  IOSTANDARD LVCMOS18 PULLTYPE PULLDOWN } [get_ports { IOC0 }]; #USB_A15 (SAM3X)
+set_property -dict { PACKAGE_PIN T25  IOSTANDARD LVCMOS18 PULLTYPE PULLDOWN } [get_ports { IOC1 }]; #USB_A16 (SAM3X)
+set_property -dict { PACKAGE_PIN R27  IOSTANDARD LVCMOS18 PULLTYPE PULLDOWN } [get_ports { IOC2 }]; #USB_A17 (SAM3X)
 # Main UART
-set_property -dict { PACKAGE_PIN AE33  IOSTANDARD LVCMOS18 } [get_ports { IOC3 }]; #UART1TXD - OpenTitan UART0 RX
-set_property -dict { PACKAGE_PIN AD34 IOSTANDARD LVCMOS18 } [get_ports { IOC4 }]; #UART1RXD - OpenTitan UART0 TX
+set_property -dict { PACKAGE_PIN P25  IOSTANDARD LVCMOS18 } [get_ports { IOC3 }]; #UART1TXD - OpenTitan UART0 RX
+set_property -dict { PACKAGE_PIN N24 IOSTANDARD LVCMOS18 } [get_ports { IOC4 }]; #UART1RXD - OpenTitan UART0 TX
 # TAP Strap 1
-set_property -dict { PACKAGE_PIN AC34  IOSTANDARD LVCMOS18 PULLTYPE PULLDOWN } [get_ports { IOC5 }]; #USB_A19 (SAM3X)
+set_property -dict { PACKAGE_PIN M24  IOSTANDARD LVCMOS18 PULLTYPE PULLDOWN } [get_ports { IOC5 }]; #USB_A19 (SAM3X)
 # PWM (PMOD2)
-set_property -dict { PACKAGE_PIN AB34  IOSTANDARD LVCMOS18 } [get_ports { IOC6 }]; # PMOD2_IO2 (PWM)
+set_property -dict { PACKAGE_PIN M27  IOSTANDARD LVCMOS18 } [get_ports { IOC6 }]; # PMOD2_IO2 (PWM)
 # USB VBUS Detection
-set_property -dict { PACKAGE_PIN AA34  IOSTANDARD LVCMOS18 } [get_ports { IOC7 }]; # USRUSB_VBUS_DETECT
+set_property -dict { PACKAGE_PIN L25  IOSTANDARD LVCMOS18 } [get_ports { IOC7 }]; # USRUSB_VBUS_DETECT
 # TAP Strap 0
-set_property -dict { PACKAGE_PIN AB32  IOSTANDARD LVCMOS18 PULLTYPE PULLDOWN } [get_ports { IOC8 }]; #USB_A18 (SAM3X)
+set_property -dict { PACKAGE_PIN K23  IOSTANDARD LVCMOS18 PULLTYPE PULLDOWN } [get_ports { IOC8 }]; #USB_A18 (SAM3X)
 # GPIOs (PMOD2)
-set_property -dict { PACKAGE_PIN AB31 IOSTANDARD LVCMOS18 } [get_ports { IOC9  }]; # PMOD2_IO1 (GPIO)
-set_property -dict { PACKAGE_PIN AA32 IOSTANDARD LVCMOS18 } [get_ports { IOC10 }]; # PMOD2_IO3 (GPIO)
-set_property -dict { PACKAGE_PIN V34 IOSTANDARD LVCMOS18 } [get_ports { IOC11 }]; # PMOD2_IO4 (GPIO)
+set_property -dict { PACKAGE_PIN K26 IOSTANDARD LVCMOS18 } [get_ports { IOC9  }]; # PMOD2_IO1 (GPIO)
+set_property -dict { PACKAGE_PIN J26 IOSTANDARD LVCMOS18 } [get_ports { IOC10 }]; # PMOD2_IO3 (GPIO)
+set_property -dict { PACKAGE_PIN H24 IOSTANDARD LVCMOS18 } [get_ports { IOC11 }]; # PMOD2_IO4 (GPIO)
 # GPIO (PMOD1)
-set_property -dict { PACKAGE_PIN U34 IOSTANDARD LVCMOS18 } [get_ports { IOC12 }]; # PMOD1_IO6 (RESET)
+set_property -dict { PACKAGE_PIN H26 IOSTANDARD LVCMOS18 } [get_ports { IOC12 }]; # PMOD1_IO6 (RESET)
 
 ## IOR bank
 # JTAG
