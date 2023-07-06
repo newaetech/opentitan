@@ -49,7 +49,7 @@ impl CW310 {
     const PIN_CS: &'static str = "USB_SPI_CS";
     // Pins needed for reset & bootstrap on the CW310 board.
     const PIN_TRST: &'static str = "USB_A13";
-    const PIN_SRST: &'static str = "PC2";
+    const PIN_SRST: &'static str = "PC30";
     const PIN_SW_STRAP0: &'static str = "PC21";
     const PIN_SW_STRAP1: &'static str = "PC22";
     const PIN_SW_STRAP2: &'static str = "PC23";

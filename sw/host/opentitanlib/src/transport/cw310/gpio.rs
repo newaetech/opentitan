@@ -30,9 +30,13 @@ impl GpioPin for CW310GpioPin {
         Ok(pin != 0)
     }
 
-    fn write(&self, value: bool) -> Result<()> {
+    fn write(&self, mut value: bool) -> Result<()> {
         let usb = self.device.borrow();
-        usb.pin_set_state(&self.pinname, value)?;
+
+	if &self.pinname == "PC30" {
+		value = !value;        
+	}
+	usb.pin_set_state(&self.pinname, value)?;
         Ok(())
     }
 

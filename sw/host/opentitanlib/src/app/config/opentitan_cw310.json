@@ -5,7 +5,7 @@
     {
       "name": "RESET",
       "mode": "PushPull",
-      "alias_of": "PC2",
+      "alias_of": "PC30",
       "pull_mode": "None"
     },
     {
